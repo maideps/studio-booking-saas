@@ -1,0 +1,30 @@
+# Generic ignores for harness-enabled projects.
+# Add project-specific ignores below — this file is project-owned (INSTANCE).
+
+# Harness runtime traces (session records are local state, not evidence)
+.harness/traces/*.json
+
+# Harness upgrade backups — a local safety net, not durable evidence
+.harness/backups/
+
+# Node projects
+node_modules/
+
+# Windows reserved device names (shell redirect artifacts)
+nul
+NUL
+
+# Product (Laravel + Vue)
+.env
+web/.env
+web/vendor/
+web/node_modules/
+web/public/build/
+web/public/hot
+web/storage/*.key
+web/storage/logs/
+web/.phpunit.cache/
+web/.phpunit.result.cache
+web/coverage/
+playwright-report/
+test-results/

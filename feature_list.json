@@ -1,0 +1,370 @@
+{
+  "features": [
+    {
+      "id": "feat-001",
+      "name": "Project skeleton and tooling",
+      "behavior": "Laravel application in web/ with Vue 3 + TypeScript via Inertia, Pest, Larastan, Pint, ESLint, vue-tsc and Vitest; Docker Compose with PostgreSQL, Redis and Mailpit; tools/ launchers wire PHP and Node tooling into the harness lint, typecheck, test and build scripts.",
+      "verification": "A health route returns 200 in a Pest test; npm run lint, typecheck, test and build run the PHP and front-end tools and pass; docker compose up serves the app.",
+      "dependencies": [],
+      "layers": [
+        {
+          "label": "Layer 1: Static checks",
+          "cmd": "npm run lint",
+          "repair": "Fix static-analysis errors and rerun the layer command."
+        },
+        {
+          "label": "Layer 2: Runtime tests",
+          "cmd": "npm run test",
+          "repair": "Fix failing tests and rerun the layer command."
+        },
+        {
+          "label": "Layer 3: System confirmation",
+          "cmd": "npm run check",
+          "repair": "Resolve remaining issues and rerun full verification."
+        }
+      ]
+    },
+    {
+      "id": "feat-002",
+      "name": "Tenancy foundation",
+      "behavior": "Tenant model, tenant resolution from the request subdomain, a BelongsToTenant trait with a global scope and automatic tenant_id on create, tenant context carried into queued jobs, and a test helper that creates two tenants.",
+      "verification": "Tests prove a record created in tenant A is invisible to tenant B in queries, routes and queued jobs; an architecture test fails if a tenant-owned model lacks the trait or bypasses the scope.",
+      "dependencies": [
+        "feat-001"
+      ],
+      "layers": [
+        {
+          "label": "Layer 1: Static checks",
+          "cmd": "npm run lint",
+          "repair": "Fix static-analysis errors and rerun the layer command."
+        },
+        {
+          "label": "Layer 2: Runtime tests",
+          "cmd": "npm run test",
+          "repair": "Fix failing tests and rerun the layer command."
+        },
+        {
+          "label": "Layer 3: System confirmation",
+          "cmd": "npm run check",
+          "repair": "Resolve remaining issues and rerun full verification."
+        }
+      ]
+    },
+    {
+      "id": "feat-003",
+      "name": "Authentication and roles",
+      "behavior": "Users belong to a tenant (the same email may exist in two tenants), login and registration, roles owner, staff and customer, and Laravel policies enforcing them.",
+      "verification": "Tests cover every role and a user from another tenant for each protected action; a user cannot sign in to a different tenant.",
+      "dependencies": [
+        "feat-002"
+      ],
+      "layers": [
+        {
+          "label": "Layer 1: Static checks",
+          "cmd": "npm run lint",
+          "repair": "Fix static-analysis errors and rerun the layer command."
+        },
+        {
+          "label": "Layer 2: Runtime tests",
+          "cmd": "npm run test",
+          "repair": "Fix failing tests and rerun the layer command."
+        },
+        {
+          "label": "Layer 3: System confirmation",
+          "cmd": "npm run check",
+          "repair": "Resolve remaining issues and rerun full verification."
+        }
+      ]
+    },
+    {
+      "id": "feat-004",
+      "name": "Studios, staff and classes",
+      "behavior": "Studio settings, staff invitations, class templates and scheduled sessions with capacity, instructor and time.",
+      "verification": "Owners and staff can create and edit classes within their tenant; customers can list them; policy and isolation tests pass.",
+      "dependencies": [
+        "feat-003"
+      ],
+      "layers": [
+        {
+          "label": "Layer 1: Static checks",
+          "cmd": "npm run lint",
+          "repair": "Fix static-analysis errors and rerun the layer command."
+        },
+        {
+          "label": "Layer 2: Runtime tests",
+          "cmd": "npm run test",
+          "repair": "Fix failing tests and rerun the layer command."
+        },
+        {
+          "label": "Layer 3: System confirmation",
+          "cmd": "npm run check",
+          "repair": "Resolve remaining issues and rerun full verification."
+        }
+      ]
+    },
+    {
+      "id": "feat-005",
+      "name": "Bookings with capacity locking",
+      "behavior": "Booking a session inside a transaction with a row lock, so capacity is never exceeded; a customer cannot double-book the same session.",
+      "verification": "A concurrency test fires parallel booking requests at the last spot and asserts exactly one succeeds and capacity is never exceeded.",
+      "dependencies": [
+        "feat-004"
+      ],
+      "layers": [
+        {
+          "label": "Layer 1: Static checks",
+          "cmd": "npm run lint",
+          "repair": "Fix static-analysis errors and rerun the layer command."
+        },
+        {
+          "label": "Layer 2: Runtime tests",
+          "cmd": "npm run test",
+          "repair": "Fix failing tests and rerun the layer command."
+        },
+        {
+          "label": "Layer 3: System confirmation",
+          "cmd": "npm run check",
+          "repair": "Resolve remaining issues and rerun full verification."
+        }
+      ]
+    },
+    {
+      "id": "feat-006",
+      "name": "Cancellation and waitlist",
+      "behavior": "Cancellation window rules, a FIFO waitlist, and automatic promotion of the first waitlisted customer when a spot opens.",
+      "verification": "Tests cover cancellation inside and outside the window, promotion order, and a promotion race with a new booking.",
+      "dependencies": [
+        "feat-005"
+      ],
+      "layers": [
+        {
+          "label": "Layer 1: Static checks",
+          "cmd": "npm run lint",
+          "repair": "Fix static-analysis errors and rerun the layer command."
+        },
+        {
+          "label": "Layer 2: Runtime tests",
+          "cmd": "npm run test",
+          "repair": "Fix failing tests and rerun the layer command."
+        },
+        {
+          "label": "Layer 3: System confirmation",
+          "cmd": "npm run check",
+          "repair": "Resolve remaining issues and rerun full verification."
+        }
+      ]
+    },
+    {
+      "id": "feat-007",
+      "name": "Memberships and Stripe checkout",
+      "behavior": "Membership plans and class packs, Stripe checkout in test mode with Cashier, and entitlement rules that decide whether a customer may book.",
+      "verification": "Tests with a fake Stripe gateway cover subscribe, entitlement checks and class-pack credit use; no test calls the network.",
+      "dependencies": [
+        "feat-003"
+      ],
+      "layers": [
+        {
+          "label": "Layer 1: Static checks",
+          "cmd": "npm run lint",
+          "repair": "Fix static-analysis errors and rerun the layer command."
+        },
+        {
+          "label": "Layer 2: Runtime tests",
+          "cmd": "npm run test",
+          "repair": "Fix failing tests and rerun the layer command."
+        },
+        {
+          "label": "Layer 3: System confirmation",
+          "cmd": "npm run check",
+          "repair": "Resolve remaining issues and rerun full verification."
+        }
+      ]
+    },
+    {
+      "id": "feat-008",
+      "name": "Stripe webhooks and payment failures",
+      "behavior": "Signature-verified, idempotent webhook handling with stored event ids, a grace period after a failed payment, and suspension of booking rights.",
+      "verification": "Replaying the same webhook twice changes state once; failed-payment fixtures move a customer through grace to suspended; a bad signature is rejected.",
+      "dependencies": [
+        "feat-007"
+      ],
+      "layers": [
+        {
+          "label": "Layer 1: Static checks",
+          "cmd": "npm run lint",
+          "repair": "Fix static-analysis errors and rerun the layer command."
+        },
+        {
+          "label": "Layer 2: Runtime tests",
+          "cmd": "npm run test",
+          "repair": "Fix failing tests and rerun the layer command."
+        },
+        {
+          "label": "Layer 3: System confirmation",
+          "cmd": "npm run check",
+          "repair": "Resolve remaining issues and rerun full verification."
+        }
+      ]
+    },
+    {
+      "id": "feat-009",
+      "name": "Notifications and scheduled jobs",
+      "behavior": "Queued booking confirmations and reminders (Mailpit locally), and scheduled jobs for reminders and membership expiry.",
+      "verification": "Tests assert queued mails with fakes; the scheduler test runs the jobs for the right tenants only.",
+      "dependencies": [
+        "feat-005",
+        "feat-007"
+      ],
+      "layers": [
+        {
+          "label": "Layer 1: Static checks",
+          "cmd": "npm run lint",
+          "repair": "Fix static-analysis errors and rerun the layer command."
+        },
+        {
+          "label": "Layer 2: Runtime tests",
+          "cmd": "npm run test",
+          "repair": "Fix failing tests and rerun the layer command."
+        },
+        {
+          "label": "Layer 3: System confirmation",
+          "cmd": "npm run check",
+          "repair": "Resolve remaining issues and rerun full verification."
+        }
+      ]
+    },
+    {
+      "id": "feat-010",
+      "name": "Audit log",
+      "behavior": "Append-only audit records for bookings, memberships and role changes, readable by owners.",
+      "verification": "Tests assert records are written with actor, tenant and time, cannot be updated or deleted, and are isolated per tenant.",
+      "dependencies": [
+        "feat-005",
+        "feat-008"
+      ],
+      "layers": [
+        {
+          "label": "Layer 1: Static checks",
+          "cmd": "npm run lint",
+          "repair": "Fix static-analysis errors and rerun the layer command."
+        },
+        {
+          "label": "Layer 2: Runtime tests",
+          "cmd": "npm run test",
+          "repair": "Fix failing tests and rerun the layer command."
+        },
+        {
+          "label": "Layer 3: System confirmation",
+          "cmd": "npm run check",
+          "repair": "Resolve remaining issues and rerun full verification."
+        }
+      ]
+    },
+    {
+      "id": "feat-011",
+      "name": "Public API",
+      "behavior": "A versioned JSON API for an embeddable booking widget: list sessions and create bookings, per-tenant API tokens, rate limiting and generated OpenAPI documentation.",
+      "verification": "Contract tests cover the endpoints, token scoping to one tenant, and rate limits; the OpenAPI document is generated and validated.",
+      "dependencies": [
+        "feat-005"
+      ],
+      "layers": [
+        {
+          "label": "Layer 1: Static checks",
+          "cmd": "npm run lint",
+          "repair": "Fix static-analysis errors and rerun the layer command."
+        },
+        {
+          "label": "Layer 2: Runtime tests",
+          "cmd": "npm run test",
+          "repair": "Fix failing tests and rerun the layer command."
+        },
+        {
+          "label": "Layer 3: System confirmation",
+          "cmd": "npm run check",
+          "repair": "Resolve remaining issues and rerun full verification."
+        }
+      ]
+    },
+    {
+      "id": "feat-012",
+      "name": "Customer and staff UI",
+      "behavior": "Vue pages for the schedule, booking flow, my bookings, membership purchase, and the staff and owner admin screens.",
+      "verification": "Component tests cover the key states (loading, empty, error); typecheck and lint pass; the pages work against the real backend.",
+      "dependencies": [
+        "feat-005",
+        "feat-006",
+        "feat-007"
+      ],
+      "layers": [
+        {
+          "label": "Layer 1: Static checks",
+          "cmd": "npm run lint",
+          "repair": "Fix static-analysis errors and rerun the layer command."
+        },
+        {
+          "label": "Layer 2: Runtime tests",
+          "cmd": "npm run test",
+          "repair": "Fix failing tests and rerun the layer command."
+        },
+        {
+          "label": "Layer 3: System confirmation",
+          "cmd": "npm run check",
+          "repair": "Resolve remaining issues and rerun full verification."
+        }
+      ]
+    },
+    {
+      "id": "feat-013",
+      "name": "End-to-end tests and CI",
+      "behavior": "Playwright tests for the booking flow and tenant isolation, and a GitHub Actions workflow running the harness gates.",
+      "verification": "The Playwright suite passes locally and in CI; CI runs lint, typecheck, tests, build and the end-to-end suite on every push.",
+      "dependencies": [
+        "feat-012"
+      ],
+      "layers": [
+        {
+          "label": "Layer 1: Static checks",
+          "cmd": "npm run lint",
+          "repair": "Fix static-analysis errors and rerun the layer command."
+        },
+        {
+          "label": "Layer 2: Runtime tests",
+          "cmd": "npm run test",
+          "repair": "Fix failing tests and rerun the layer command."
+        },
+        {
+          "label": "Layer 3: System confirmation",
+          "cmd": "npm run check",
+          "repair": "Resolve remaining issues and rerun full verification."
+        }
+      ]
+    },
+    {
+      "id": "feat-014",
+      "name": "Demo data, README and release",
+      "behavior": "Seeded demo of two tenants, architecture diagram, screenshots or GIF, design-decisions section and a v1.0.0 release.",
+      "verification": "A new reader can run the demo from the README alone in under five minutes; the release is tagged.",
+      "dependencies": [
+        "feat-013"
+      ],
+      "layers": [
+        {
+          "label": "Layer 1: Static checks",
+          "cmd": "npm run lint",
+          "repair": "Fix static-analysis errors and rerun the layer command."
+        },
+        {
+          "label": "Layer 2: Runtime tests",
+          "cmd": "npm run test",
+          "repair": "Fix failing tests and rerun the layer command."
+        },
+        {
+          "label": "Layer 3: System confirmation",
+          "cmd": "npm run check",
+          "repair": "Resolve remaining issues and rerun full verification."
+        }
+      ]
+    }
+  ]
+}
