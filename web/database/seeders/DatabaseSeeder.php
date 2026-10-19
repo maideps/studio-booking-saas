@@ -4,24 +4,27 @@ declare(strict_types=1);
 
 namespace Database\Seeders;
 
+use App\Models\Tenant;
 use App\Models\User;
-use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 
 class DatabaseSeeder extends Seeder
 {
-    use WithoutModelEvents;
-
     /**
      * Seed the application's database.
+     *
+     * Model events stay on: they fill tenant_id and guard tenant writes.
      */
     public function run(): void
     {
-        // User::factory(10)->create();
+        $tenant = Tenant::factory()->create([
+            'name' => 'Demo Studio',
+            'slug' => 'demo',
+        ]);
 
-        User::factory()->create([
+        $tenant->run(fn () => User::factory()->create([
             'name' => 'Test User',
             'email' => 'test@example.com',
-        ]);
+        ]));
     }
 }

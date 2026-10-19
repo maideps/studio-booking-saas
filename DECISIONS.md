@@ -100,3 +100,24 @@ This file records significant architectural decisions, their context, alternativ
 **Consequences:**
 - Positive: one command, no committed secret, and the three roles always run the same code.
 - Negative: removing the `app-secrets` volume rotates the key and invalidates sessions. Code changes need `docker compose up --build`.
+
+### D-007: The tenant scope fails closed and tenant writes are guarded
+
+**Date:** 2026-10-19
+**Status:** accepted
+**Context:** D-002 sets the tenancy model but not what happens when code runs without a tenant (a console command, a queued job that lost its tenant, a route without the `tenant` middleware), or when a record is written for the wrong tenant. A scope that silently does nothing in those cases returns every tenant's rows.
+**Decision:**
+- With no current tenant, a query on a tenant-owned model throws `TenancyViolation` instead of running unscoped.
+- `BelongsToTenant` also guards writes: creates, updates and deletes need a tenant context that matches the record's `tenant_id`, and `tenant_id` can never change. Bulk updates skip model events, so tenant-owned models use a `TenantBuilder` that refuses a bulk write of `tenant_id`.
+- The `tenant` middleware is sorted before every other middleware, so the session save, authentication and route model binding run inside the tenant.
+- The current tenant is only set through `$tenant->run()`, which always restores the previous tenant.
+- Queued jobs carry the tenant id as a serialized property, captured when the job is created. A job middleware runs the job inside that tenant.
+- The architecture test treats any code that drops global scopes, skips model events, bulk-inserts or reaches the database outside Eloquent as a scope bypass, unless it is in `CrossTenant`. Every queued job must be tenant-aware unless it is listed as central.
+- `users` gets `tenant_id` and a per-tenant unique email now, through a new migration, so the trait and the architecture test cover every model from the start. Login and registration stay in feat-003.
+**Alternatives considered:**
+- An empty result set with no tenant — Rejected: it hides the bug as "no data" instead of failing loudly.
+- Setting the tenant on the worker automatically from a queue payload hook — Rejected: D-002 asks for the tenant to be passed explicitly, and an implicit hook is easy to miss when reading a job.
+- Leaving `users` unscoped until feat-003 — Rejected: the architecture test would need an exception for it.
+**Consequences:**
+- Positive: a missing or wrong tenant is a loud error in tests, not a silent leak.
+- Negative: console commands, seeders and scheduled jobs must enter a tenant (`$tenant->run()`) or use `CrossTenant`. Seeders cannot use `WithoutModelEvents`, and bulk inserts on tenant tables need a reviewed exception to the rule.

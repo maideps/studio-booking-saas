@@ -10,7 +10,7 @@ A multi-tenant booking and membership platform for small studios (yoga, fitness,
 
 ## Status
 
-Early build. The project skeleton (feat-001) is in place: the Laravel app in [`web/`](web/), its tooling wired into the harness gates, and a Docker Compose stack. Product features start with tenancy (feat-002). The 14-feature plan is in [`feature_list.json`](feature_list.json); the current state is in [`PROGRESS.md`](PROGRESS.md) and the hand-off for the next session is in [`session-handoff.md`](session-handoff.md).
+Early build. The project skeleton (feat-001) is in place: the Laravel app in [`web/`](web/), its tooling wired into the harness gates, and a Docker Compose stack. The tenancy foundation (feat-002) is built: tenants on subdomains, a tenant scope on every tenant-owned model, tenant-aware queued jobs, and tests that prove one studio cannot see another's data (see [Tenancy](docs/ARCHITECTURE.md#tenancy)). Authentication and roles come next (feat-003). The 14-feature plan is in [`feature_list.json`](feature_list.json); the current state is in [`PROGRESS.md`](PROGRESS.md) and the hand-off for the next session is in [`session-handoff.md`](session-handoff.md).
 
 ## Quick Start
 

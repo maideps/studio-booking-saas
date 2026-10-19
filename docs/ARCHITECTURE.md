@@ -100,7 +100,56 @@ Layering inside `web/app/` (dependencies point downward only):
 
 Key design rules:
 
-- **Tenancy:** one database, a `tenant_id` column on every tenant-owned table (including users), a global scope applied by a `BelongsToTenant` trait, tenant resolved from the request (subdomain) and carried explicitly into queued jobs (D-002).
+- **Tenancy:** one database, a `tenant_id` column on every tenant-owned table (including users), a global scope applied by a `BelongsToTenant` trait, tenant resolved from the request (subdomain) and carried explicitly into queued jobs (D-002, D-007; see Tenancy below).
 - **Capacity:** booking inside a transaction with a row lock on the session; a concurrency test fires parallel requests and asserts no overbooking.
 - **Billing:** webhook handlers verify the Stripe signature, record each event id, and are safe to replay.
 - **Audit:** state changes append rows to an audit table that is never updated or deleted.
+
+### Tenancy
+
+The mechanism from D-002 and D-007 lives in `web/app/Tenancy/` and `web/app/Models/Tenant.php`.
+
+- **Tenants** are central records (`tenants` table: `name`, unique `slug`). The slug is the subdomain: the studio `acme` is served on `acme.<TENANCY_DOMAIN>`.
+  - `TENANCY_DOMAIN` is set in `config/tenancy.php` and defaults to `localhost`. It is a bare host name, without a port.
+  - Browsers resolve `*.localhost` to the local machine, so the seeded demo tenant is `http://demo.localhost:8000` in the Compose stack, after `php artisan db:seed`.
+- **Context:** `TenantContext` holds the current tenant.
+  - It is a scoped instance, so each request and each queued job starts with none.
+  - Code enters a tenant only with `$tenant->run(fn () => ...)`. It restores the previous tenant afterwards, even when the callback throws, and refuses a tenant that was never saved.
+- **Requests:** tenant routes use the `tenant` middleware (`ResolveTenantFromSubdomain`).
+  - It accepts exactly `<slug>.<TENANCY_DOMAIN>`. Any other host is a 404: the bare domain, an unknown slug, a nested subdomain, or another domain.
+  - It is sorted first in the middleware priority list. The session save, authentication and route model binding therefore all run inside the tenant. An architecture test checks the order.
+- **Models:** a tenant-owned model uses `BelongsToTenant`, and its table has an indexed `tenant_id` that references `tenants`. `users` is tenant-owned, and email is unique per tenant. The trait:
+  - adds `TenantScope`, which limits every query, including relation and `whereHas` queries, to the current tenant. With no tenant it throws `TenancyViolation` (fail closed).
+  - fills `tenant_id` on create;
+  - refuses creates, updates and deletes outside a tenant context or for another tenant, and any change of `tenant_id`;
+  - gives the model a `TenantBuilder`, which refuses a bulk `update()`, `increment()` or `decrement()` that writes `tenant_id`. Bulk writes skip model events, so the trait's guards would not see them.
+- **Cross-tenant reads:** `CrossTenant::query(Model::class)` is the only sanctioned way to drop the scope. It is for platform-level work, such as a scheduled job that fans out per tenant.
+- **Queued jobs:** a tenant-aware job implements `TenantAwareJob`, uses the `TenantAware` trait and calls `captureTenant()` in its constructor.
+  - The tenant id is a serialized property of the job.
+  - On the worker, the `RunInTenantContext` job middleware runs the job inside that tenant and restores the previous context.
+  - A job created outside a tenant, one that never captured its tenant, or one whose tenant was deleted fails.
+  - A job that defines its own `middleware()` must include `RunInTenantContext`.
+  - Pass ids, not models with loaded tenant-owned relations: Laravel reloads those relations before job middleware runs.
+- **What runs without a tenant** (and so fails closed on any tenant-owned query until it enters one):
+  - console commands and scheduled tasks;
+  - queued notifications, mailables, listeners and broadcasts that are not built as `TenantAwareJob`;
+  - a job's `failed()` handler, which runs outside job middleware;
+  - `defer()` callbacks, terminate callbacks and streamed response bodies, which run after the middleware has restored the context.
+- **Enforcement:** the tests are in `web/tests/Feature/Tenancy/TenancyArchitectureTest.php`, and the checks they run are in `web/tests/Support/TenancyArchitecture.php`.
+  - Every Eloquent model under `app/`, except the central `Tenant`, uses `BelongsToTenant`.
+  - Every tenant-owned table has an index that starts with `tenant_id`, and a foreign key from it to `tenants`.
+  - Every queued job under `app/` is a `TenantAwareJob`, unless it is listed in `CENTRAL_JOBS`.
+  - No code in `app/`, `routes/` or `database/` other than `CrossTenant`:
+    - drops global scopes (`withoutGlobalScope*`, `newQueryWithoutScope*`, `newModelQuery`, `getQuery`);
+    - skips model events (`withoutEvents`, any `*Quietly` method, `WithoutModelEvents`);
+    - bulk-inserts (`insert`, `upsert` and similar);
+    - reaches the database outside Eloquent: `DB::` query calls (aliased too), `getConnection()`, `app('db')`, or the `DatabaseManager` and connection types;
+    - calls a method dynamically (`->{...}()`, `->$method()`).
+    `DB::transaction` is fine.
+  - Every check except the middleware order also has a test that feeds it a violation.
+- **Known limits:**
+  - The bypass check is a token scan of our own code, not a proof. A hand-built PDO, or a connection reached through an untyped variable, would pass it.
+  - Laravel internals that skip global scopes are outside the trait: queue model restoration, `fresh()` and `refresh()`, and the `unique` and `exists` validation rules. Validation rules on tenant-owned tables need an explicit `tenant_id` condition.
+  - Cache keys and file storage paths are not tenant-prefixed. Code that caches or stores tenant data must include the tenant id itself.
+  - PostgreSQL row-level security remains a later option (D-002).
+- **Tests:** `twoTenants()` creates `studio-a` and `studio-b`, and `tenantUrl($tenant, $path)` builds a URL on a tenant's subdomain (`web/tests/Pest.php`). `phpunit.xml` pins `TENANCY_DOMAIN=localhost`.

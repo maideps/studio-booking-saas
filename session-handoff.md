@@ -5,51 +5,74 @@ Fill this at session end for large sessions; keep it current otherwise.
 ## Current Objective
 
 - Goal: build Studio Booking SaaS, a multi-tenant booking and membership platform (Laravel, Vue, PostgreSQL, Stripe test mode), as a portfolio project built with AI coding agents using ai-harness-framework, one feature at a time.
-- Current status: feat-001 (project skeleton and tooling) is `passing`. No feature is active. Next is feat-002 (tenancy foundation).
-- Branch / commit: `main`, local repository only, with no GitHub remote yet. The session 002 work is **not committed yet**; it waits for the author's go-ahead.
+- Current status: feat-001 and feat-002 (tenancy foundation) are `passing`. No feature is active. Next is feat-003 (authentication and roles).
+- Branch / commit: `main`, local repository only, with no GitHub remote yet. feat-001 is committed as `3014156`. The session 003 work (feat-002) is **not committed yet**; it waits for the author's go-ahead.
 
 ## Completed This Session
 
-- [x] Confirmed the harness is the latest ai-harness-framework (`b2bf54d`, v0.5.0); no upgrade needed.
-- [x] feat-001:
-  - Laravel 13 app in `web/`: Inertia v3, Vue 3 and TypeScript; Pest, Larastan level 8, Pint with strict types enforced, ESLint, vue-tsc and Vitest.
-  - `tools/` launchers wired into the root gates; `npm run setup:web` and `npm run smoke`.
-  - Docker Compose stack (app, worker, scheduler, PostgreSQL, Redis, Mailpit).
-  - CI installs PHP before the gates.
-- [x] Independent review pass; fixes applied (see `progress/002-2026-10-19.md`).
-- [x] Decisions D-005 (SQLite tests until feat-005) and D-006 (one app image, runtime `APP_KEY`).
+- [x] Baseline: `./init.sh`, including the full `npm run check`, passed on a clean tree before any edit.
+- [x] feat-002, per D-002 and the new D-007 (details in `docs/ARCHITECTURE.md`, section Tenancy):
+  - the `Tenant` model;
+  - the subdomain middleware `tenant`, sorted first;
+  - `TenantContext` and `$tenant->run()`;
+  - the `BelongsToTenant` trait, with a fail-closed scope, write guards and `TenantBuilder`;
+  - `CrossTenant::query()`;
+  - tenant-aware queued jobs;
+  - `users` made tenant-owned, with email unique per tenant;
+  - the test helpers `twoTenants()` and `tenantUrl()`.
+- [x] Isolation tests (queries, relations, bulk updates, routes, jobs, including a real `database` worker) and architecture tests, each check also fed a violation.
+- [x] Independent review pass; its high and normal findings were fixed (see `progress/003-2026-10-19.md`).
 
 ## Verification Evidence
 
 | Check | Command | Result | Notes |
 |---|---|---|---|
-| Full verification | `npm run check` | PASS | Pint, ESLint, Larastan, vue-tsc, Pest (4 tests), Vitest (1 test), Vite build and the harness's own tests all ran |
-| Feature gate | `npm run verify-feature -- feat-001` | PASS | Evidence in `.harness/state/feat-001.json`. The SKIPs in Layer 3 are the harness's adoption-matrix toolchains (Python, Go, Rust) and its example multi-repo entry, not product checks |
-| Compose stack | `npm run smoke` | PASS | Image built; `/up`, the `Welcome` page and its script served; all six containers running with zero restarts; torn down |
+| Full verification | `npm run check` | PASS | Pint, ESLint, Larastan, vue-tsc, Pest (47 tests, 99 assertions), Vitest (1 test), Vite build and the harness's own tests all ran |
+| Feature gate | `npm run verify-feature -- feat-002` | PASS | Evidence in `.harness/state/feat-002.json`. The SKIPs in Layer 3 are the harness's adoption-matrix toolchains (Python, Go, Rust) and its example multi-repo entry, not product checks |
+| Trail | `npm run vcr` | PASS | `.harness/trails/2026-10-19T22-24-26-753Z-vcr.json` |
+| Compose stack | `npm run smoke` | PASS | The app migrated PostgreSQL, including the new `users` migration |
 | Architecture rules | `npm run check-arch` | PASS | |
 
 ## Files Changed
 
 - New:
-  - `web/` (Laravel app), `tools/`, `docker/app/`, `docker-compose.yml`
-  - `docs/sprints/feat-001.md`, `progress/002-2026-10-19.md`, `.harness/state/feat-001.json`
+  - `web/app/Tenancy/` (context, scope, trait, builder, `CrossTenant`, violation, `Queue/`)
+  - `web/app/Models/Tenant.php`, `web/app/Http/Middleware/ResolveTenantFromSubdomain.php`, `web/config/tenancy.php`
+  - `web/database/factories/TenantFactory.php`, two migrations (`2026_10_19_000000`, `2026_10_19_000001`)
+  - `web/tests/Feature/Tenancy/`, `web/tests/Feature/DatabaseSeederTest.php`, `web/tests/Support/`, `web/tests/Fixtures/`
+  - `docs/sprints/feat-002.md`, `progress/003-2026-10-19.md`, `.harness/state/feat-002.json`
 - Changed:
-  - root `package.json` scripts, `.github/workflows/ci.yml`
-  - `README.md`, `DECISIONS.md`, `docs/ARCHITECTURE.md`, `docs/quality-document.md`
-  - `docs/HARNESS.md` and `PROGRESS.md` (both generated)
+  - `web/app/Models/User.php`, `web/app/Providers/AppServiceProvider.php`, `web/bootstrap/app.php`, `web/database/seeders/DatabaseSeeder.php`
+  - `web/tests/Pest.php`, `web/phpunit.xml`, `web/.env.example`
+  - `README.md`, `DECISIONS.md`, `docs/ARCHITECTURE.md`, `docs/quality-document.md`, `PROGRESS.md` (generated)
 
 ## Decisions Made
 
-- D-005: PHP tests run on SQLite in memory until feat-005 needs PostgreSQL row locks.
-- D-006: one Docker image for the web app, worker and scheduler. `APP_KEY` is generated into a shared volume when none is set. Ports are bound to `127.0.0.1`.
+- D-007:
+  - The tenant scope fails closed (it throws when there is no tenant).
+  - Tenant writes are guarded, bulk writes of `tenant_id` included.
+  - The `tenant` middleware sorts before every other middleware.
+  - Jobs carry their tenant id explicitly.
+  - The architecture test defines what counts as a scope bypass.
+  - `users` became tenant-owned in this feature.
 
 ## Blockers / Risks
 
+- **For feat-003:**
+  - `password_reset_tokens` is keyed by email alone, which clashes with per-tenant emails.
+  - `unique` and `exists` validation rules on `users` need an explicit `tenant_id` condition.
+  - Login and registration routes must use the `tenant` middleware.
+  - Add a login test with the database session driver.
+- **Not handled yet:**
+  - Tenant slugs are not validated against `Tenant::SLUG_PATTERN` and none are reserved (needed when tenant signup is built).
+  - A `TENANCY_DOMAIN` with a port is not rejected.
+  - A job that overrides `middleware()` without `RunInTenantContext` is not detected (it still fails closed).
+  - Cache keys and file storage are not tenant-prefixed.
 - **Before feat-005:** move the PHP tests (at least the capacity tests) to a PostgreSQL test database (D-005).
-- **Herd's `php.ini`:** the broken `php_redis-8.3.dll` line was commented out on the author's machine (backup `php.ini.bak-2026-10-19`). A Herd update may bring it back. Local PHP has no Redis extension; the Docker image does.
-- **The `e2e` layer** still runs the harness's own suite. A green `npm run check` is not product end-to-end evidence until feat-013 adds Playwright.
-- **`LICENSE`** is a harness CORE file and `harness-upgrade` resets it to the framework's copyright line. Still undecided.
-- **Not done here:** CI dependency caching (left for feat-013); exact pins for `pecl redis` and the Mailpit image.
+- Carried over:
+  - Herd's `php.ini` Redis line may come back after a Herd update.
+  - The `e2e` layer is still the harness's own suite until feat-013.
+  - The `LICENSE` copyright line is still undecided.
 
 ## Next Session Startup
 
@@ -60,8 +83,10 @@ Fill this at session end for large sessions; keep it current otherwise.
 
 ## Recommended Next Step
 
-- Start feat-002 (tenancy foundation):
-  - Write `docs/sprints/feat-002.md` first, then `npm run activate -- feat-002`.
-  - Build the `Tenant` model, subdomain resolution, the `BelongsToTenant` trait with its global scope, tenant context in queued jobs, and a two-tenant test helper (D-002).
-  - Add a Pest architecture test that fails if a tenant-owned model lacks the trait or bypasses the scope outside the one named helper.
+- Commit feat-002 once the author approves it.
+- Start feat-003 (authentication and roles):
+  - Write `docs/sprints/feat-003.md` first, then `npm run activate -- feat-003`.
+  - Put the auth routes behind the `tenant` middleware.
+  - Use tenant-aware validation rules.
+  - Re-key password reset tokens per tenant.
 - Create the GitHub repository when ready: `gh repo create maideps/studio-booking-saas --public --source . --push`.
