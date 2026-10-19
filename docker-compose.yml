@@ -1,0 +1,107 @@
+# Local stack: docker compose up, then open http://localhost:8000 (Mailpit: http://localhost:8025).
+# All credentials here are for local, throwaway containers. Ports can be moved with the
+# *_PORT variables (npm run smoke uses that to run beside a stack you already have up).
+
+x-app-env: &app-env
+  APP_NAME: Studio Booking
+  APP_ENV: local
+  APP_DEBUG: "true"
+  APP_URL: http://localhost:${APP_PORT:-8000}
+  LOG_CHANNEL: stderr
+  DB_CONNECTION: pgsql
+  DB_HOST: postgres
+  DB_PORT: "5432"
+  DB_DATABASE: studio_booking
+  DB_USERNAME: studio_booking
+  DB_PASSWORD: ${DB_PASSWORD:-studio_booking}
+  REDIS_CLIENT: phpredis
+  REDIS_HOST: redis
+  REDIS_PORT: "6379"
+  CACHE_STORE: redis
+  QUEUE_CONNECTION: redis
+  SESSION_DRIVER: redis
+  MAIL_MAILER: smtp
+  MAIL_HOST: mailpit
+  MAIL_PORT: "1025"
+  MAIL_FROM_ADDRESS: bookings@studio-booking.test
+
+x-app: &app
+  build:
+    context: ./web
+    dockerfile: ../docker/app/Dockerfile
+    additional_contexts:
+      docker: ./docker
+  image: studio-booking-app:local
+  environment: *app-env
+  volumes:
+    - app-secrets:/var/app-secrets
+  restart: unless-stopped
+
+services:
+  app:
+    <<: *app
+    command: sh -c "php artisan migrate --force && php artisan serve --host=0.0.0.0 --port=8000"
+    ports:
+      - "127.0.0.1:${APP_PORT:-8000}:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      mailpit:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "php", "-r", "exit(@file_get_contents('http://127.0.0.1:8000/up') === false ? 1 : 0);"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 10s
+
+  worker:
+    <<: *app
+    command: php artisan queue:work --tries=3 --max-time=3600
+    depends_on:
+      app:
+        condition: service_healthy
+
+  scheduler:
+    <<: *app
+    command: php artisan schedule:work
+    depends_on:
+      app:
+        condition: service_healthy
+
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: studio_booking
+      POSTGRES_USER: studio_booking
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-studio_booking}
+    ports:
+      - "127.0.0.1:${DB_FORWARD_PORT:-5432}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U studio_booking -d studio_booking"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "127.0.0.1:${REDIS_FORWARD_PORT:-6379}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  mailpit:
+    image: axllent/mailpit:v1.21
+    ports:
+      - "127.0.0.1:${MAILPIT_PORT:-8025}:8025"
+
+volumes:
+  app-secrets:
+  postgres-data:

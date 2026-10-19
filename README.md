@@ -4,43 +4,54 @@ A multi-tenant booking and membership platform for small studios (yoga, fitness,
 
 > **Portfolio project.** All data is synthetic, Stripe runs in test mode only, and emails are caught locally. It is built with AI coding agents using [ai-harness-framework](https://github.com/maideps/ai-harness-framework): one feature at a time, with layered verification and recorded evidence in this repository (`feature_list.json`, `progress/`, `DECISIONS.md`).
 
-**Stack (planned):** Laravel (PHP 8.3+) · Vue 3 + TypeScript (Inertia) · PostgreSQL · Redis · Stripe (test mode, Cashier) · Pest · Larastan · Playwright · Docker Compose · GitHub Actions
+**Stack:** Laravel 13 (PHP 8.3+) · Vue 3 + TypeScript (Inertia) · PostgreSQL · Redis · Pest · Larastan · Docker Compose · GitHub Actions. Planned: Stripe (test mode, Cashier) in feat-007 and Playwright in feat-013.
 
 **What it is meant to demonstrate:** tenant isolation that is proven by tests, booking without overbooking under concurrency, idempotent Stripe webhooks, role-based policies, queued and scheduled jobs, an append-only audit log, and a small versioned public API.
 
 ## Status
 
-Planning. The 14-feature plan is in [`feature_list.json`](feature_list.json); the current state is in [`PROGRESS.md`](PROGRESS.md) and the hand-off for the next session is in [`session-handoff.md`](session-handoff.md). No application code yet.
+Early build. The project skeleton (feat-001) is in place: the Laravel app in [`web/`](web/), its tooling wired into the harness gates, and a Docker Compose stack. Product features start with tenancy (feat-002). The 14-feature plan is in [`feature_list.json`](feature_list.json); the current state is in [`PROGRESS.md`](PROGRESS.md) and the hand-off for the next session is in [`session-handoff.md`](session-handoff.md).
 
 ## Quick Start
 
 ```bash
-# 1. Verify the environment is healthy
+# 1. Install the Laravel app's dependencies (Composer, npm, a local .env and SQLite database)
+npm run setup:web
+
+# 2. Verify the environment is healthy
 ./init.sh
 
-# 2. Run full verification (make and npm forms are 1:1 mirrors)
+# 3. Run full verification (make and npm forms are 1:1 mirrors)
 make check          # or: npm run check
 
-# 3. See all available commands
+# 4. Run the whole stack: app on http://localhost:8000, Mailpit on http://localhost:8025
+#    (--build rebuilds the image so it picks up code changes; ports are bound to localhost only)
+docker compose up --build
+
+# 5. See all available commands
 make help           # or: npm run help
 ```
 
+`npm run smoke` builds the image, starts the stack as a throwaway Compose project on its own ports, checks that it serves the app, and removes it again.
+
 ### Prerequisites
 
-- **Node.js** ≥ 18 — the harness runtime (stack detection, verification layers, session traces)
+- **Node.js** ≥ 20.19 — the harness runtime and the front-end build (Vite 8); `.nvmrc` pins the version CI uses
+- **PHP** ≥ 8.3 with Composer, and the `intl`, `pdo_sqlite` and `pdo_pgsql` extensions (Laravel Herd provides all of them on Windows and macOS)
+- **Docker** with Compose — for `docker compose up` and `npm run smoke`
 - **Make** — optional; `npm run <target>` mirrors every make target
 
 ## Verification Layers
 
 | Layer | Command | What It Checks |
 |-------|---------|----------------|
-| 1 | `make lint` / `npm run lint` | Static analysis |
-| 1b | `make typecheck` / `npm run typecheck` | Type safety |
-| 2 | `make test` / `npm run test` | Unit and integration tests |
-| 3 | `make build` / `npm run build` | Build verification |
-| 3b | `make e2e` / `npm run e2e` | End-to-end tests |
+| 1 | `make lint` / `npm run lint` | Harness lint, Pint (PHP formatting, strict types), ESLint |
+| 1b | `make typecheck` / `npm run typecheck` | Harness checks, Larastan (level 8), vue-tsc (strict) |
+| 2 | `make test` / `npm run test` | Harness tests, Pest, Vitest |
+| 3 | `make build` / `npm run build` | Harness build check, Vite production build |
+| 3b | `make e2e` / `npm run e2e` | End-to-end tests (the harness's own for now; the product's Playwright suite arrives in feat-013) |
 
-Layers that are not configured report **SKIP** and do not count as verified.
+Each layer runs the harness's own check first, then the product tools in `web/` through the launchers in `tools/`. Layers that are not configured report **SKIP** and do not count as verified.
 
 ### Harness Commands
 

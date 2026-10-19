@@ -16,8 +16,18 @@ jobs:
         with:
           node-version-file: .nvmrc
 
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.3"
+          extensions: intl, pdo_pgsql, pdo_sqlite, zip
+          tools: composer:v2
+          coverage: none
+
       - name: Install and set up project
         run: npm run setup --if-present
+
+      - name: Install the Laravel app (web/)
+        run: npm run setup:web
 
       - name: Verify project
         run: npm run check

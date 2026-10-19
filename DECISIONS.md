@@ -72,3 +72,31 @@ This file records significant architectural decisions, their context, alternativ
 **Consequences:**
 - Positive: fast, offline, reproducible tests.
 - Negative: fixtures can drift from Stripe's real payloads; refresh them by hand when upgrading the SDK.
+
+### D-005: PHP tests run on SQLite in memory until PostgreSQL behaviour is under test
+
+**Date:** 2026-10-19
+**Status:** accepted
+**Context:** D-001 and D-002 put the product on PostgreSQL. Laravel's `phpunit.xml` defaults to SQLite in memory, which lets `npm run test` run with no containers, on any machine and in CI. feat-005 will test capacity with row locks and parallel requests, and SQLite cannot show that behaviour.
+**Decision:** Keep SQLite in memory for the PHP test suite through feat-004. Before feat-005, the suite (or the tests that depend on PostgreSQL) moves to a PostgreSQL test database, started by the test tooling. The Compose stack always uses PostgreSQL.
+**Alternatives considered:**
+- PostgreSQL for every test from feat-001 — Rejected for now: every `npm run test` would need Docker before any test relies on PostgreSQL.
+**Consequences:**
+- Positive: fast, dependency-free tests while the schema is small.
+- Negative: SQLite and PostgreSQL differ (types, locking, JSON). Tenancy tests in feat-002 to feat-004 must not depend on PostgreSQL-only behaviour, and the switch is a required step of feat-005.
+
+### D-006: One app image for the web app, worker and scheduler; APP_KEY generated at runtime
+
+**Date:** 2026-10-19
+**Status:** accepted
+**Context:** `docker compose up` must start the whole system with one command (`docs/PRODUCT.md`), and secrets must never be committed. Laravel needs the same `APP_KEY` in every process that reads encrypted data.
+**Decision:** `docker/app/Dockerfile` builds one image (Vite assets, then PHP 8.3 with `pdo_pgsql` and `redis`, running as `www-data`), and Compose runs it three times with different commands.
+- When `APP_KEY` is not set, the entrypoint generates a key into the shared `app-secrets` volume.
+- The worker and scheduler start only after the app is healthy, so they read the same key and never write it.
+- The app runs migrations on start. Published ports are bound to `127.0.0.1`.
+**Alternatives considered:**
+- A committed development key in `docker-compose.yml` — Rejected: it is still a committed secret.
+- A required `.env` at the root — Rejected: it breaks the one-command start.
+**Consequences:**
+- Positive: one command, no committed secret, and the three roles always run the same code.
+- Negative: removing the `app-secrets` volume rotates the key and invalidates sessions. Code changes need `docker compose up --build`.

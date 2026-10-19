@@ -1,0 +1,18 @@
+# Build context for docker/app/Dockerfile. Keep local state out of the image:
+# the container gets its configuration from docker-compose.yml.
+.env
+.env.*
+!.env.example
+node_modules
+vendor
+public/build
+public/hot
+bootstrap/cache/*.php
+database/database.sqlite
+storage/logs/*
+storage/framework/cache/*
+storage/framework/sessions/*
+storage/framework/views/*
+storage/pail
+tests
+.phpunit.cache

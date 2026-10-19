@@ -36,5 +36,7 @@
 | `make setup` | `npm run setup` |
 | `make dev` | `npm run dev` |
 | `make help` | `npm run help` |
+| — | `npm run smoke` |
 | — | `npm run harness-docs` |
+| — | `npm run setup:web` |
 | — | `npm run prepublishOnly` |

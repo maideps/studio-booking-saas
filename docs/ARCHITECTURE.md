@@ -72,9 +72,24 @@ Booking widget (public JSON API)          --->       |
 Product directories (declared in `.harness/manifest.json` as `productRoots`):
 
 - `web/` — the Laravel application (PHP and Vue sources, `composer.json`, its own `package.json`). It lives in a subfolder because the repository root `package.json` belongs to the harness.
-- `tools/` — small launchers that run PHP and Node tooling from the harness gates on any operating system.
+  - Inertia pages are in `web/resources/js/pages/` and are named after the screen they render; `web/resources/js/app.ts` resolves them.
+  - PHP tests (Pest) are in `web/tests/Feature` and `web/tests/Unit`, which includes architecture tests such as "every class in `App` uses strict types". Front-end tests (Vitest) are in `web/tests/js`.
+  - Tool configuration lives next to the code: `pint.json`, `phpstan.neon`, `eslint.config.js`, `tsconfig.json`, `vite.config.ts`, `vitest.config.ts`.
+- `tools/` — small Node launchers that run PHP and Node tooling from the harness gates on any operating system:
+  - `php.mjs` runs PHP in `web/` (Pint, Larastan, Pest).
+  - `web.mjs` runs `web/package.json` scripts (ESLint, vue-tsc, Vitest, Vite).
+  - `setup-web.mjs` installs `web/` (`npm run setup:web`).
+  - `compose-smoke.mjs` runs the Compose stack smoke test (`npm run smoke`).
+  - On Windows, PHP, Composer and npm are `.bat`/`.cmd` shims, so the launchers start them through a shell.
 - `docker/`, `docker-compose.yml` — local stack (app, queue worker, scheduler, PostgreSQL, Redis, Mailpit).
+  - `docker/app/Dockerfile` builds one image for the three PHP roles: Vite assets in a Node stage, then PHP 8.3 with `pdo_pgsql` and `redis`. It runs as `www-data`.
+  - No `APP_KEY` is committed. When none is set, the entrypoint generates one into the shared `app-secrets` volume. The worker and scheduler start only after the app is healthy, so they read the same key.
+  - The app runs migrations on start.
 - `docs/sprints/` — one sprint contract per feature.
+
+The root `lint`, `typecheck`, `test` and `build` scripts run the harness's own check first, then the product tools through `tools/`. Each tool runs only after the previous one passes.
+
+PHP tests run on SQLite in memory (set in `web/phpunit.xml`, D-005), so `npm run test` needs no containers. The Compose stack and production-like runs use PostgreSQL. Tests that depend on PostgreSQL behaviour, such as the row locks in feat-005, will need a PostgreSQL test database.
 
 Layering inside `web/app/` (dependencies point downward only):
 
