@@ -6,7 +6,7 @@ Fill this at session end for large sessions; keep it current otherwise.
 
 - Goal: build Studio Booking SaaS, a multi-tenant booking and membership platform (Laravel, Vue, PostgreSQL, Stripe test mode), as a portfolio project built with AI coding agents using ai-harness-framework, one feature at a time.
 - Current status: feat-001 and feat-002 (tenancy foundation) are `passing`. No feature is active. Next is feat-003 (authentication and roles).
-- Branch / commit: `main`, local repository only, with no GitHub remote yet. feat-001 is committed as `3014156` and feat-002 as `8ade887`. Nothing has been pushed.
+- Branch / commit: `main`, pushed to the private GitHub repository `maideps/studio-booking-saas` (`origin`). feat-001 is committed as `3014156` and feat-002 as `8ade887`.
 
 ## Completed This Session
 
@@ -88,4 +88,4 @@ Fill this at session end for large sessions; keep it current otherwise.
   - Put the auth routes behind the `tenant` middleware.
   - Use tenant-aware validation rules.
   - Re-key password reset tokens per tenant.
-- Create the GitHub repository when ready: `gh repo create maideps/studio-booking-saas --public --source . --push`.
+- The GitHub repository is private for now. Make it public when the project is ready to show: `gh repo edit maideps/studio-booking-saas --visibility public --accept-visibility-change-consequences`.
