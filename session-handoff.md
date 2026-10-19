@@ -6,7 +6,7 @@ Fill this at session end for large sessions; keep it current otherwise.
 
 - Goal: build Studio Booking SaaS, a multi-tenant booking and membership platform (Laravel, Vue, PostgreSQL, Stripe test mode), as a portfolio project built with AI coding agents using ai-harness-framework, one feature at a time.
 - Current status: feat-001 and feat-002 (tenancy foundation) are `passing`. No feature is active. Next is feat-003 (authentication and roles).
-- Branch / commit: `main`, local repository only, with no GitHub remote yet. feat-001 is committed as `3014156`. The session 003 work (feat-002) is **not committed yet**; it waits for the author's go-ahead.
+- Branch / commit: `main`, local repository only, with no GitHub remote yet. feat-001 is committed as `3014156` and feat-002 as `8ade887`. Nothing has been pushed.
 
 ## Completed This Session
 
@@ -83,7 +83,6 @@ Fill this at session end for large sessions; keep it current otherwise.
 
 ## Recommended Next Step
 
-- Commit feat-002 once the author approves it.
 - Start feat-003 (authentication and roles):
   - Write `docs/sprints/feat-003.md` first, then `npm run activate -- feat-003`.
   - Put the auth routes behind the `tenant` middleware.
