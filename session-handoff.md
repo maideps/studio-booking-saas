@@ -6,7 +6,7 @@ Fill this at session end for large sessions; keep it current otherwise.
 
 - Goal: build Studio Booking SaaS, a multi-tenant booking and membership platform (Laravel, Vue, PostgreSQL, Stripe test mode), as a portfolio project built with AI coding agents using ai-harness-framework, one feature at a time.
 - Current status: feat-001, feat-002 and feat-003 (authentication and roles) are `passing`. No feature is active. Next is feat-004 (studios, staff and classes).
-- Branch / commit: `main`, pushed to the private GitHub repository `maideps/studio-booking-saas` (`origin`) up to `00e8eea`. **feat-003 is not committed yet**: it waits for the author's go-ahead.
+- Branch / commit: `main`, pushed to the private GitHub repository `maideps/studio-booking-saas` (`origin`). feat-001 is committed as `3014156`, feat-002 as `8ade887` and feat-003 as `5121d98`.
 
 ## Completed This Session
 
@@ -98,8 +98,7 @@ Fill this at session end for large sessions; keep it current otherwise.
 
 ## Recommended Next Step
 
-- Commit feat-003 once the author approves it. Suggested message: `feat(feat-003): tenant-scoped authentication, roles and policies`.
-- Then start feat-004 (studios, staff and classes):
+- Start feat-004 (studios, staff and classes):
   - Write `docs/sprints/feat-004.md` first, then `npm run activate -- feat-004`.
   - Staff invitations can build on `ChangeMemberRole` and `UserPolicy`.
   - New policies get the tenant check from `Gate::before`.
