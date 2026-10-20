@@ -10,7 +10,7 @@ A multi-tenant booking and membership platform for small studios (yoga, fitness,
 
 ## Status
 
-Early build. The project skeleton (feat-001) is in place: the Laravel app in [`web/`](web/), its tooling wired into the harness gates, and a Docker Compose stack. The tenancy foundation (feat-002) is built: tenants on subdomains, a tenant scope on every tenant-owned model, tenant-aware queued jobs, and tests that prove one studio cannot see another's data (see [Tenancy](docs/ARCHITECTURE.md#tenancy)). Authentication and roles come next (feat-003). The 14-feature plan is in [`feature_list.json`](feature_list.json); the current state is in [`PROGRESS.md`](PROGRESS.md) and the hand-off for the next session is in [`session-handoff.md`](session-handoff.md).
+Early build. The project skeleton (feat-001) is in place: the Laravel app in [`web/`](web/), its tooling wired into the harness gates, and a Docker Compose stack. The tenancy foundation (feat-002) is built: tenants on subdomains, a tenant scope on every tenant-owned model, tenant-aware queued jobs, and tests that prove one studio cannot see another's data (see [Tenancy](docs/ARCHITECTURE.md#tenancy)). Authentication and roles (feat-003) are built: login, registration and password reset on each studio's subdomain, the roles owner, staff and customer, and policies that enforce them. Tests show that a session, reset token or login lockout from one studio has no effect in another (see [Authentication and roles](docs/ARCHITECTURE.md#authentication-and-roles)). Studios, staff and classes come next (feat-004). The 14-feature plan is in [`feature_list.json`](feature_list.json); the current state is in [`PROGRESS.md`](PROGRESS.md) and the hand-off for the next session is in [`session-handoff.md`](session-handoff.md).
 
 ## Quick Start
 
@@ -33,6 +33,8 @@ make help           # or: npm run help
 ```
 
 `npm run smoke` builds the image, starts the stack as a throwaway Compose project on its own ports, checks that it serves the app, and removes it again.
+
+To try sign-in, seed the demo studio (`docker compose exec app php artisan db:seed`) and open http://demo.localhost:8000/login. The seeder creates `owner@example.com`, `staff@example.com` and `customer@example.com`, all with the factory password `password`.
 
 ### Prerequisites
 

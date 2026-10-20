@@ -4,11 +4,18 @@ declare(strict_types=1);
 
 namespace Tests\Support;
 
+use App\Http\Middleware\ResolveTenantFromSubdomain;
 use App\Models\Tenant;
 use App\Tenancy\BelongsToTenant;
 use App\Tenancy\Queue\TenantAwareJob;
+use Closure;
+use Illuminate\Auth\Middleware\Authenticate;
+use Illuminate\Auth\Middleware\Authorize;
+use Illuminate\Auth\Middleware\RedirectIfAuthenticated;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Routing\Route;
+use Illuminate\Routing\Router;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Schema;
 use PhpToken;
@@ -57,6 +64,15 @@ final class TenancyArchitecture
         'WithoutModelEvents', 'DatabaseManager', 'ConnectionInterface', 'ConnectionResolverInterface',
         'Illuminate\\Database\\Connection',
     ];
+
+    /**
+     * Rule strings that Laravel checks with a plain query, without global
+     * scopes: `unique:users,email`, `required|exists:users,id`.
+     */
+    private const string VALIDATION_RULE_STRING_PATTERN = '/(?:^|\|)\s*(unique|exists):/i';
+
+    /** Middleware that read the signed-in user, so they only work inside a tenant. */
+    public const array TENANT_ONLY_MIDDLEWARE = [Authenticate::class, RedirectIfAuthenticated::class, Authorize::class];
 
     /** Container keys of the database manager and connections. */
     private const string DB_SERVICE_PATTERN = '/^db(\.|$)/';
@@ -146,20 +162,83 @@ final class TenancyArchitecture
      */
     public static function scopeBypassesInDirectories(array $directories, array $allowedFiles): array
     {
-        $allowed = array_map(self::normalizePath(...), $allowedFiles);
+        return self::findInDirectories($directories, $allowedFiles, self::scopeBypassesIn(...));
+    }
+
+    /**
+     * `unique` and `exists` validation rules in one PHP source, as
+     * "line N: rule". Laravel checks them with a plain query that skips the
+     * tenant scope, so tenant-owned tables must use TenantRule instead.
+     *
+     * @return list<string>
+     */
+    public static function untenantedValidationRulesIn(string $source): array
+    {
+        $tokens = array_values(array_filter(
+            PhpToken::tokenize($source),
+            fn (PhpToken $token): bool => ! $token->isIgnorable(),
+        ));
+
         $found = [];
 
-        foreach ($directories as $directory) {
-            foreach (File::allFiles($directory) as $file) {
-                $path = self::normalizePath($file->getPathname());
+        foreach ($tokens as $i => $token) {
+            $previous = $tokens[$i - 1] ?? null;
+            $beforePrevious = $tokens[$i - 2] ?? null;
+            $name = self::shortName($token);
 
-                if ($file->getExtension() !== 'php' || in_array($path, $allowed, true)) {
-                    continue;
-                }
+            if ($token->is(T_CONSTANT_ENCAPSED_STRING)
+                && preg_match(self::VALIDATION_RULE_STRING_PATTERN, trim($token->text, '\'"')) === 1) {
+                $found[] = sprintf('line %d: rule string %s', $token->line, $token->text);
+            } elseif (in_array($name, ['unique', 'exists'], true) && $previous !== null && $previous->is(T_DOUBLE_COLON)
+                && $beforePrevious !== null && self::shortName($beforePrevious) === 'Rule') {
+                $found[] = sprintf('line %d: Rule::%s', $token->line, $name);
+            } elseif (in_array($name, ['Unique', 'Exists'], true) && $previous !== null && $previous->is(T_NEW)) {
+                $found[] = sprintf('line %d: new %s', $token->line, $name);
+            }
+        }
 
-                foreach (self::scopeBypassesIn($file->getContents()) as $bypass) {
-                    $found[] = self::relativePath($path).' '.$bypass;
-                }
+        return $found;
+    }
+
+    /**
+     * Untenanted validation rules in every PHP file under the directories,
+     * as "relative/path.php line N: rule", skipping the allowed files.
+     *
+     * @param  list<string>  $directories
+     * @param  list<string>  $allowedFiles  absolute paths
+     * @return list<string>
+     */
+    public static function untenantedValidationRulesInDirectories(array $directories, array $allowedFiles): array
+    {
+        return self::findInDirectories($directories, $allowedFiles, self::untenantedValidationRulesIn(...));
+    }
+
+    /**
+     * The routes with authentication or authorization middleware but no
+     * `tenant` middleware, as "METHODS uri". Those middleware load the
+     * signed-in user, which needs a tenant.
+     *
+     * @param  iterable<Route>  $routes
+     * @return list<string>
+     */
+    public static function routesOutsideTenant(Router $router, iterable $routes): array
+    {
+        $found = [];
+
+        foreach ($routes as $route) {
+            $middleware = array_map(
+                fn (mixed $entry): string => is_string($entry) ? explode(':', $entry, 2)[0] : '',
+                $router->gatherRouteMiddleware($route),
+            );
+
+            $needsTenant = array_filter(
+                $middleware,
+                fn (string $class): bool => collect(self::TENANT_ONLY_MIDDLEWARE)
+                    ->contains(fn (string $tenantOnly): bool => is_a($class, $tenantOnly, true)),
+            );
+
+            if ($needsTenant !== [] && ! in_array(ResolveTenantFromSubdomain::class, $middleware, true)) {
+                $found[] = implode('|', $route->methods()).' '.$route->uri();
             }
         }
 
@@ -260,6 +339,34 @@ final class TenancyArchitecture
         }
 
         return $problems;
+    }
+
+    /**
+     * @param  list<string>  $directories
+     * @param  list<string>  $allowedFiles  absolute paths
+     * @param  Closure(string): list<string>  $check
+     * @return list<string>
+     */
+    private static function findInDirectories(array $directories, array $allowedFiles, Closure $check): array
+    {
+        $allowed = array_map(self::normalizePath(...), $allowedFiles);
+        $found = [];
+
+        foreach ($directories as $directory) {
+            foreach (File::allFiles($directory) as $file) {
+                $path = self::normalizePath($file->getPathname());
+
+                if ($file->getExtension() !== 'php' || in_array($path, $allowed, true)) {
+                    continue;
+                }
+
+                foreach ($check($file->getContents()) as $finding) {
+                    $found[] = self::relativePath($path).' '.$finding;
+                }
+            }
+        }
+
+        return $found;
     }
 
     /**

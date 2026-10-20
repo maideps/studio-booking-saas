@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Http\Middleware\ResolveTenantFromSubdomain;
 use App\Models\Tenant;
+use App\Models\User;
 use App\Tenancy\BelongsToTenant;
 use App\Tenancy\Queue\TenantAware;
 use App\Tenancy\Queue\TenantAwareJob;
@@ -141,6 +142,79 @@ it('does not report safe code that only mentions bypass names', function (): voi
         PHP;
 
     expect(TenancyArchitecture::scopeBypassesIn($source))->toBe([]);
+});
+
+it('checks unique and exists rules only through TenantRule', function (): void {
+    $rules = TenancyArchitecture::untenantedValidationRulesInDirectories(
+        [app_path(), base_path('routes'), database_path()],
+        allowedFiles: [app_path('Tenancy/TenantRule.php')],
+    );
+
+    expect($rules)->toBe([]);
+});
+
+it('reports unique and exists rules that skip the tenant', function (): void {
+    $source = <<<'PHP'
+        <?php
+        use Illuminate\Validation\Rule;
+        use Illuminate\Validation\Rules\Unique;
+        $rules = ['email' => 'required|email|unique:users,email'];
+        $rules = ['user_id' => ['required', 'exists:users,id']];
+        $rules = ['email' => [Rule::unique('users')]];
+        $rules = ['user_id' => [\Illuminate\Validation\Rule::exists(User::class, 'id')]];
+        $rules = ['email' => [new Unique('users', 'email')]];
+        $rules = ['user_id' => [new \Illuminate\Validation\Rules\Exists('users')]];
+        PHP;
+
+    expect(TenancyArchitecture::untenantedValidationRulesIn($source))->toBe([
+        "line 4: rule string 'required|email|unique:users,email'",
+        "line 5: rule string 'exists:users,id'",
+        'line 6: Rule::unique',
+        'line 7: Rule::exists',
+        'line 8: new Unique',
+        'line 9: new Exists',
+    ]);
+});
+
+it('does not report tenant-aware or unrelated validation rules', function (): void {
+    $source = <<<'PHP'
+        <?php
+        $rules = ['email' => ['required', 'email', TenantRule::unique(User::class, 'email')]];
+        $rules = ['member_id' => [TenantRule::exists(User::class, 'id')]];
+        $rules = ['items' => ['array', 'distinct']];
+        $message = 'This value must be unique: pick another.';
+        $collection->unique();
+        File::exists($path);
+        PHP;
+
+    expect(TenancyArchitecture::untenantedValidationRulesIn($source))->toBe([]);
+});
+
+it('puts every route that loads the signed-in user behind the tenant middleware', function (): void {
+    app(Kernel::class);
+    $router = app('router');
+
+    expect($router->getRoutes()->getRoutesByName())->toHaveKeys(['login', 'dashboard', 'members.index'])
+        ->and(TenancyArchitecture::routesOutsideTenant($router, $router->getRoutes()->getRoutes()))->toBe([]);
+});
+
+it('reports a route that loads the signed-in user outside a tenant', function (): void {
+    app(Kernel::class);
+    $router = app('router');
+
+    $routes = [
+        Route::middleware(['web', 'auth'])->get('/_arch/auth', fn () => 'ok'),
+        Route::middleware(['web', 'guest'])->post('/_arch/guest', fn () => 'ok'),
+        Route::middleware(['web'])->get('/_arch/can', fn () => 'ok')->can('viewAny', User::class),
+        Route::middleware(['web', 'tenant', 'auth'])->get('/_arch/tenant', fn () => 'ok'),
+        Route::middleware(['web'])->get('/_arch/public', fn () => 'ok'),
+    ];
+
+    expect(TenancyArchitecture::routesOutsideTenant($router, $routes))->toBe([
+        'GET|HEAD _arch/auth',
+        'POST _arch/guest',
+        'GET|HEAD _arch/can',
+    ]);
 });
 
 it('resolves the tenant before the session, authentication and route model binding', function (): void {

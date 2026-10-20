@@ -59,6 +59,18 @@ trait BelongsToTenant
     }
 
     /**
+     * Whether this record belongs to the tenant the code runs in. False when
+     * there is no tenant context.
+     */
+    public function belongsToCurrentTenant(): bool
+    {
+        $current = app(TenantContext::class)->current();
+        $recordTenantId = $this->getAttribute('tenant_id');
+
+        return $current !== null && is_numeric($recordTenantId) && (int) $recordTenantId === $current->id;
+    }
+
+    /**
      * @return BelongsTo<Tenant, $this>
      */
     public function tenant(): BelongsTo

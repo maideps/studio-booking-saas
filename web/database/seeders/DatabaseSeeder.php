@@ -11,7 +11,8 @@ use Illuminate\Database\Seeder;
 class DatabaseSeeder extends Seeder
 {
     /**
-     * Seed the application's database.
+     * Seed the application's database: a demo studio with one member per
+     * role, all with the factory password ("password").
      *
      * Model events stay on: they fill tenant_id and guard tenant writes.
      */
@@ -22,9 +23,10 @@ class DatabaseSeeder extends Seeder
             'slug' => 'demo',
         ]);
 
-        $tenant->run(fn () => User::factory()->create([
-            'name' => 'Test User',
-            'email' => 'test@example.com',
-        ]));
+        $tenant->run(function (): void {
+            User::factory()->owner()->create(['name' => 'Olivia Owner', 'email' => 'owner@example.com']);
+            User::factory()->staff()->create(['name' => 'Sam Staff', 'email' => 'staff@example.com']);
+            User::factory()->customer()->create(['name' => 'Casey Customer', 'email' => 'customer@example.com']);
+        });
     }
 }

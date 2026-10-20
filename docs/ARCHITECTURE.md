@@ -146,10 +146,44 @@ The mechanism from D-002 and D-007 lives in `web/app/Tenancy/` and `web/app/Mode
     - reaches the database outside Eloquent: `DB::` query calls (aliased too), `getConnection()`, `app('db')`, or the `DatabaseManager` and connection types;
     - calls a method dynamically (`->{...}()`, `->$method()`).
     `DB::transaction` is fine.
+  - No code in `app/`, `routes/` or `database/` other than `TenantRule` uses the `unique` or `exists` validation rules (`Rule::unique`, `Rule::exists`, `new Unique`, `new Exists`, or a `unique:` / `exists:` rule string). Laravel checks them without global scopes (D-008).
+  - Every route with `auth`, `guest` or `can` middleware also has the `tenant` middleware (D-008).
   - Every check except the middleware order also has a test that feeds it a violation.
 - **Known limits:**
-  - The bypass check is a token scan of our own code, not a proof. A hand-built PDO, or a connection reached through an untyped variable, would pass it.
-  - Laravel internals that skip global scopes are outside the trait: queue model restoration, `fresh()` and `refresh()`, and the `unique` and `exists` validation rules. Validation rules on tenant-owned tables need an explicit `tenant_id` condition.
+  - The bypass and validation-rule checks are token scans of our own code, not a proof. A hand-built PDO, a connection reached through an untyped variable, or a rule string built at runtime would pass them.
+  - Laravel internals that skip global scopes are outside the trait: queue model restoration, `fresh()` and `refresh()`, and the `unique` and `exists` validation rules. Use `TenantRule` for the validation rules.
   - Cache keys and file storage paths are not tenant-prefixed. Code that caches or stores tenant data must include the tenant id itself.
   - PostgreSQL row-level security remains a later option (D-002).
 - **Tests:** `twoTenants()` creates `studio-a` and `studio-b`, and `tenantUrl($tenant, $path)` builds a URL on a tenant's subdomain (`web/tests/Pest.php`). `phpunit.xml` pins `TENANCY_DOMAIN=localhost`.
+
+### Authentication and roles
+
+Login, registration and roles from D-008 build on the tenancy mechanism. The code is in `web/app/Http/Controllers/Auth/`, `web/app/Auth/`, `web/app/Policies/` and `web/app/Enums/Role.php`.
+
+- **Routes** (`web/routes/web.php`). Every route that needs a signed-in user, and every guest-only auth page, is inside one `tenant` middleware group. On the bare domain or an unknown subdomain they return 404.
+  - Guest pages: `/login`, `/register`, `/forgot-password`, `/reset-password/{token}`.
+  - Signed-in pages: `/dashboard`, `POST /logout`, `/members` and `PATCH /members/{member}/role`.
+  - An architecture rule (`TenancyArchitecture::routesOutsideTenant`) fails on any route with `auth`, `guest` or `can` middleware outside the group.
+- **Users and login.**
+  - The Eloquent user provider queries through the tenant scope. Credentials, the session's user id and the remember-me token therefore only resolve to a user of the current tenant. A cookie from tenant A is a guest on tenant B.
+  - Session cookies are host-only while `SESSION_DOMAIN` is unset. Leave it unset: a shared parent domain would send every studio's cookie to every other studio. The scoped lookup would still keep them guests.
+  - Login regenerates the session id, and logout invalidates the session.
+  - Failed logins are throttled per tenant, email and IP (`LoginRequest::MAX_ATTEMPTS`). The cache key includes the tenant id.
+- **Roles.** `App\Enums\Role` has `owner`, `staff` and `customer`, stored in `users.role` (default `customer`). Registration always creates a customer. `role` is not fillable, and only `ChangeMemberRole` sets it.
+- **Policies.**
+  - `Gate::before` (in `AppServiceProvider`) denies every ability to a user who does not belong to the current tenant, and to everyone when there is no tenant.
+  - `UserPolicy`: `viewAny` (list members) allows owners and staff. `updateRole` allows owners only, and never on their own account.
+  - Routes authorize with `->can(...)`, and pages receive per-row flags such as `canUpdateRole` so the UI matches the policy.
+- **Password reset.**
+  - `password_reset_tokens` is tenant-owned (`tenant_id`, `email`, hashed `token`, `created_at`; unique `tenant_id, email`).
+  - `TenantTokenRepository` reads and writes it through the `PasswordResetToken` model, so the tenant scope and write guards apply. `TenantPasswordBrokerManager` installs it in place of Laravel's `DatabaseTokenRepository`.
+  - `php artisan auth:clear-resets` purges expired tokens of every tenant through `CrossTenant`.
+  - The reset link is built from the user's tenant with `Tenant::url()` (scheme and port from `APP_URL`), so it is right outside a request too.
+  - The forgot-password form answers the same way whether or not the email is a member.
+- **Validation.** `unique` and `exists` rules on tenant-owned tables go through `TenantRule::unique()` / `TenantRule::exists()`, which add the current `tenant_id`. An architecture rule fails on any other use of those rules in `app/`, `routes/` or `database/`.
+- **Shared Inertia props** (`HandleInertiaRequests`): `tenant` (name, slug) and `auth.user` (id, name, email, role, `canViewMembers`). Both are null off a tenant subdomain, where resolving the user would fail closed.
+- **Tests.**
+  - `web/tests/Feature/Auth/` and `web/tests/Feature/Members/` cover every protected action for each role, for a guest and for a user of another tenant. `Tests\Support\ProtectedActions` lists the actions, and a test fails when a route with `auth` middleware is missing from that list.
+  - A user of another tenant is tested two ways. A real tenant-A session cookie replayed on tenant B leaves them a guest. `actingAs` on tenant B gets a 403 from `Gate::before`.
+  - In tests, Laravel keeps the guard's user and the session's attributes between requests. Cookie-replay tests call `startNewRequest()` (`web/tests/Pest.php`) first, and each one also shows that a request without the cookie is a guest.
+  - The suite uses the `database` session driver (`phpunit.xml`).

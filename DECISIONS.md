@@ -121,3 +121,29 @@ This file records significant architectural decisions, their context, alternativ
 **Consequences:**
 - Positive: a missing or wrong tenant is a loud error in tests, not a silent leak.
 - Negative: console commands, seeders and scheduled jobs must enter a tenant (`$tenant->run()`) or use `CrossTenant`. Seeders cannot use `WithoutModelEvents`, and bulk inserts on tenant tables need a reviewed exception to the rule.
+
+### D-008: Authentication runs inside the tenant, and authorization starts with a tenant check
+
+**Date:** 2026-10-19
+**Status:** accepted
+**Context:** feat-003 adds login, registration, password reset and roles. Each tenant has its own users, and the same email may exist in two tenants (D-002). Three parts of Laravel's auth stack do not go through the tenant scope:
+- the password reset token table is keyed by email alone;
+- the `unique` and `exists` validation rules query without global scopes;
+- the login rate limiter's cache keys are not tenant-prefixed (D-007).
+Policies also need a rule for a user who is signed in but belongs to another tenant.
+**Decision:**
+- **Auth routes.** Login, registration, password reset and every route that needs a signed-in user run behind the `tenant` middleware. The Eloquent user provider then queries through the tenant scope, so credentials, the session's user id and the remember-me token only resolve to a user of the current tenant. An architecture rule fails on any route with `auth`, `guest` or `can` middleware outside the `tenant` middleware.
+- **Roles.** Every user has one role (`App\Enums\Role`: owner, staff, customer), stored on `users.role`. Registration always creates a customer, and `role` is not mass-assignable.
+- **Policies.** A `Gate::before` check denies every ability to a user whose `tenant_id` is not the current tenant, and to everyone when there is no tenant. Policies then only decide by role.
+- **Password reset tokens.** `password_reset_tokens` becomes a tenant-owned table with a `PasswordResetToken` model and a unique (`tenant_id`, `email`). `TenantTokenRepository` reads and writes it through the model, so tokens get the tenant scope and write guards. `TenantPasswordBrokerManager` installs the repository. Expired tokens are purged across tenants through `CrossTenant`. Reset links are built from the user's own tenant (`Tenant::url()`), not from the request.
+- **Validation rules.** `unique` and `exists` rules on tenant-owned tables go through `TenantRule`, which adds `tenant_id`. An architecture rule fails on any other `Rule::unique`, `Rule::exists`, `new Unique`, `new Exists` or `unique:` / `exists:` rule string.
+- **Login throttle.** The login throttle key includes the tenant id.
+- **Session driver in tests.** The test suite uses the `database` session driver, the app's default, so every login test saves the session through the database handler inside the tenant.
+**Alternatives considered:**
+- Laravel's `cache` token driver — Rejected: its cache keys are not tenant-prefixed either.
+- A tenant check inside each policy method — Rejected: easy to forget in a new policy. `Gate::before` covers every ability by default.
+- Rejecting a cross-tenant user in a middleware on every authenticated route — Not now. The guard can never return such a user, because its lookups are scoped (the session-replay tests show this). Every action that touches tenant data goes through a policy, and `Gate::before` covers those.
+- Building login and registration with Breeze or Fortify — Rejected: they hide the tenant-scoping points this project exists to show, and their published code would still need the same changes.
+**Consequences:**
+- Positive: a session, remember-me cookie, reset token or rate-limit lockout from one tenant has no effect in another, and tests prove each case. New policies get the tenant check for free.
+- Negative: `TenantPasswordBrokerManager` overrides a protected Laravel method, so a Laravel upgrade could break it (the password reset tests would fail). The broker's `table`, `connection` and `driver` options no longer apply. Central tables, such as tenant slugs at signup, will need their own reviewed exception to the validation-rule check.

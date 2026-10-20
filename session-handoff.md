@@ -5,66 +5,81 @@ Fill this at session end for large sessions; keep it current otherwise.
 ## Current Objective
 
 - Goal: build Studio Booking SaaS, a multi-tenant booking and membership platform (Laravel, Vue, PostgreSQL, Stripe test mode), as a portfolio project built with AI coding agents using ai-harness-framework, one feature at a time.
-- Current status: feat-001 and feat-002 (tenancy foundation) are `passing`. No feature is active. Next is feat-003 (authentication and roles).
-- Branch / commit: `main`, pushed to the private GitHub repository `maideps/studio-booking-saas` (`origin`). feat-001 is committed as `3014156` and feat-002 as `8ade887`.
+- Current status: feat-001, feat-002 and feat-003 (authentication and roles) are `passing`. No feature is active. Next is feat-004 (studios, staff and classes).
+- Branch / commit: `main`, pushed to the private GitHub repository `maideps/studio-booking-saas` (`origin`) up to `00e8eea`. **feat-003 is not committed yet**: it waits for the author's go-ahead.
 
 ## Completed This Session
 
-- [x] Baseline: `./init.sh`, including the full `npm run check`, passed on a clean tree before any edit.
-- [x] feat-002, per D-002 and the new D-007 (details in `docs/ARCHITECTURE.md`, section Tenancy):
-  - the `Tenant` model;
-  - the subdomain middleware `tenant`, sorted first;
-  - `TenantContext` and `$tenant->run()`;
-  - the `BelongsToTenant` trait, with a fail-closed scope, write guards and `TenantBuilder`;
-  - `CrossTenant::query()`;
-  - tenant-aware queued jobs;
-  - `users` made tenant-owned, with email unique per tenant;
-  - the test helpers `twoTenants()` and `tenantUrl()`.
-- [x] Isolation tests (queries, relations, bulk updates, routes, jobs, including a real `database` worker) and architecture tests, each check also fed a violation.
-- [x] Independent review pass; its high and normal findings were fixed (see `progress/003-2026-10-19.md`).
+- [x] Baseline: `./init.sh`, including the full `npm run check`, passed on a clean tree at `00e8eea` before any edit.
+- [x] feat-003, per the new D-008 (details in `docs/ARCHITECTURE.md`, section Authentication and roles):
+  - login, registration, forgot and reset password, dashboard, members list and role change, all behind the `tenant` middleware;
+  - the `Role` enum (owner, staff, customer) on `users.role`; registration always creates a customer;
+  - `UserPolicy`, plus a `Gate::before` check that denies users outside the current tenant;
+  - per-tenant password reset tokens (`PasswordResetToken`, `TenantTokenRepository`, `TenantPasswordBrokerManager`), with reset links built by `Tenant::url()`;
+  - `TenantRule` for `unique` / `exists` rules;
+  - a per-tenant login throttle;
+  - minimal Inertia pages and shared `tenant` / `auth.user` props;
+  - a seeder with one demo member per role.
+- [x] The feat-002 risks are closed:
+  - reset tokens are keyed per tenant;
+  - the validation rules are tenant-aware, and an architecture rule enforces it;
+  - the auth routes are behind `tenant`, and an architecture rule enforces it;
+  - the tests run on the `database` session driver.
+- [x] Tests:
+  - every protected action for each role, a guest, a replayed tenant-A session on tenant B, and `actingAs` a foreign user for the policy actions;
+  - the same email in two tenants;
+  - cross-tenant sign-in;
+  - password reset isolation.
+  14 deliberate breaks were each caught by a test.
+- [x] Review pass, done inline: the reset error no longer reveals membership, and there is a regression test for `/` with a signed-in session. The independent review agent was stopped by the author before it reported.
 
 ## Verification Evidence
 
 | Check | Command | Result | Notes |
 |---|---|---|---|
-| Full verification | `npm run check` | PASS | Pint, ESLint, Larastan, vue-tsc, Pest (47 tests, 99 assertions), Vitest (1 test), Vite build and the harness's own tests all ran |
-| Feature gate | `npm run verify-feature -- feat-002` | PASS | Evidence in `.harness/state/feat-002.json`. The SKIPs in Layer 3 are the harness's adoption-matrix toolchains (Python, Go, Rust) and its example multi-repo entry, not product checks |
-| Trail | `npm run vcr` | PASS | `.harness/trails/2026-10-19T22-24-26-753Z-vcr.json` |
-| Compose stack | `npm run smoke` | PASS | The app migrated PostgreSQL, including the new `users` migration |
-| Architecture rules | `npm run check-arch` | PASS | |
+| Full verification | `npm run check` | PASS | Pint, ESLint, Larastan, vue-tsc, Pest (116 tests, 414 assertions), Vitest (6 tests), Vite build and the harness's own tests all ran |
+| Feature gate | `npm run verify-feature -- feat-003` | PASS | Evidence in `.harness/state/feat-003.json`. The SKIPs in Layer 3 are the harness's adoption-matrix toolchains (Python, Go, Rust) and its example multi-repo entry, not product checks |
+| Trail | `npm run vcr` | PASS | `.harness/trails/2026-10-20T13-23-56-224Z-vcr.json` |
+| Compose stack | `npm run smoke` | PASS | The app migrated PostgreSQL, including the `role` and `password_reset_tokens` migrations |
+| Architecture rules | `npm run check-arch` | PASS | It warns that untracked files are only checked once added to git |
 
 ## Files Changed
 
 - New:
-  - `web/app/Tenancy/` (context, scope, trait, builder, `CrossTenant`, violation, `Queue/`)
-  - `web/app/Models/Tenant.php`, `web/app/Http/Middleware/ResolveTenantFromSubdomain.php`, `web/config/tenancy.php`
-  - `web/database/factories/TenantFactory.php`, two migrations (`2026_10_19_000000`, `2026_10_19_000001`)
-  - `web/tests/Feature/Tenancy/`, `web/tests/Feature/DatabaseSeederTest.php`, `web/tests/Support/`, `web/tests/Fixtures/`
-  - `docs/sprints/feat-002.md`, `progress/003-2026-10-19.md`, `.harness/state/feat-002.json`
+  - `web/app/Actions/`, `web/app/Auth/`, `web/app/Enums/Role.php`, `web/app/Policies/UserPolicy.php`, `web/app/Tenancy/TenantRule.php`, `web/app/Models/PasswordResetToken.php`
+  - `web/app/Http/Controllers/Auth/`, `DashboardController`, `MemberController`, `MemberRoleController`, `web/app/Http/Requests/`
+  - two migrations (`2026_10_19_000002`, `2026_10_19_000003`)
+  - `web/resources/js/layouts/`, `pages/Auth/`, `pages/Dashboard.vue`, `pages/Members/`, `types/inertia.d.ts`
+  - `web/tests/Feature/Auth/`, `web/tests/Feature/Members/`, `web/tests/Feature/Tenancy/TenantRuleTest.php`, `web/tests/Datasets/`, `web/tests/Support/ProtectedActions.php`, `web/tests/js/Login.test.ts`, `web/tests/js/MembersIndex.test.ts`
+  - `docs/sprints/feat-003.md`, `progress/004-2026-10-19.md`, `.harness/state/feat-003.json`
 - Changed:
-  - `web/app/Models/User.php`, `web/app/Providers/AppServiceProvider.php`, `web/bootstrap/app.php`, `web/database/seeders/DatabaseSeeder.php`
-  - `web/tests/Pest.php`, `web/phpunit.xml`, `web/.env.example`
+  - `web/app/Models/User.php`, `Tenant.php`, `web/app/Tenancy/BelongsToTenant.php`, `web/app/Providers/AppServiceProvider.php`, `web/app/Http/Middleware/HandleInertiaRequests.php`, `web/routes/web.php`
+  - `web/database/factories/UserFactory.php`, `web/database/seeders/DatabaseSeeder.php`
+  - `web/phpunit.xml` (database sessions), `web/phpstan.neon` (`parseModelCastsMethod`)
+  - `web/tests/Pest.php`, `web/tests/Support/TenancyArchitecture.php`, `web/tests/Feature/Tenancy/TenancyArchitectureTest.php`, `web/tests/Feature/DatabaseSeederTest.php`
   - `README.md`, `DECISIONS.md`, `docs/ARCHITECTURE.md`, `docs/quality-document.md`, `PROGRESS.md` (generated)
 
 ## Decisions Made
 
-- D-007:
-  - The tenant scope fails closed (it throws when there is no tenant).
-  - Tenant writes are guarded, bulk writes of `tenant_id` included.
-  - The `tenant` middleware sorts before every other middleware.
-  - Jobs carry their tenant id explicitly.
-  - The architecture test defines what counts as a scope bypass.
-  - `users` became tenant-owned in this feature.
+- D-008:
+  - Authentication runs inside the tenant.
+  - `Gate::before` denies users of other tenants.
+  - Reset tokens are a tenant-owned model behind a custom token repository.
+  - `unique` / `exists` rules go only through `TenantRule`.
+  - The login throttle is keyed per tenant.
+  - Tests use database sessions.
 
 ## Blockers / Risks
 
-- **For feat-003:**
-  - `password_reset_tokens` is keyed by email alone, which clashes with per-tenant emails.
-  - `unique` and `exists` validation rules on `users` need an explicit `tenant_id` condition.
-  - Login and registration routes must use the `tenant` middleware.
-  - Add a login test with the database session driver.
-- **Not handled yet:**
-  - Tenant slugs are not validated against `Tenant::SLUG_PATTERN` and none are reserved (needed when tenant signup is built).
+- **From feat-003:**
+  - `TenantPasswordBrokerManager` overrides Laravel's protected `createTokenRepository()`; recheck it on Laravel upgrades (the password reset tests would fail).
+  - Central tables (for example tenant slugs at signup) will need a reviewed exception to the `TenantRule` architecture rule.
+  - `/` on a tenant subdomain shows the central welcome page.
+  - The members list has no pagination.
+  - Only the Login and Members pages have component tests.
+  - Do not set `SESSION_DOMAIN` to a parent domain (see `docs/ARCHITECTURE.md`).
+- **Not handled yet (from feat-002):**
+  - Tenant slugs are not validated against `Tenant::SLUG_PATTERN` and none are reserved.
   - A `TENANCY_DOMAIN` with a port is not rejected.
   - A job that overrides `middleware()` without `RunInTenantContext` is not detected (it still fails closed).
   - Cache keys and file storage are not tenant-prefixed.
@@ -83,9 +98,10 @@ Fill this at session end for large sessions; keep it current otherwise.
 
 ## Recommended Next Step
 
-- Start feat-003 (authentication and roles):
-  - Write `docs/sprints/feat-003.md` first, then `npm run activate -- feat-003`.
-  - Put the auth routes behind the `tenant` middleware.
-  - Use tenant-aware validation rules.
-  - Re-key password reset tokens per tenant.
+- Commit feat-003 once the author approves it. Suggested message: `feat(feat-003): tenant-scoped authentication, roles and policies`.
+- Then start feat-004 (studios, staff and classes):
+  - Write `docs/sprints/feat-004.md` first, then `npm run activate -- feat-004`.
+  - Staff invitations can build on `ChangeMemberRole` and `UserPolicy`.
+  - New policies get the tenant check from `Gate::before`.
+  - Add each new protected route to `tests/Support/ProtectedActions.php`; a test fails if one is missing.
 - The GitHub repository is private for now. Make it public when the project is ready to show: `gh repo edit maideps/studio-booking-saas --visibility public --accept-visibility-change-consequences`.

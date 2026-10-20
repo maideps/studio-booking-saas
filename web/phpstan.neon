@@ -11,3 +11,6 @@ parameters:
         - routes/
         - tests/
     tmpDir: storage/framework/cache/phpstan
+    # Read model casts from the casts() method, so enum casts such as
+    # User::$role are typed as the enum rather than the column type.
+    parseModelCastsMethod: true

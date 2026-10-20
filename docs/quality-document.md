@@ -10,14 +10,17 @@ Rate each module on a scale of A (excellent) / B (good) / C (acceptable) / D (ne
 | web (Laravel + Vue) skeleton | B | A | B | B | n/a |
 | tools/ launchers and Docker stack | C | n/a | B | B | n/a |
 | web tenancy (`app/Tenancy`, `Tenant`, subdomain middleware) | A | A | A | A | B |
+| web auth and roles (`app/Auth`, `Policies`, `Enums/Role`, auth controllers and pages) | A | A | A | A | B |
 
 ## Summary
 
-- **Overall Quality Grade:** B (tenancy foundation in place; no booking behavior yet)
+- **Overall Quality Grade:** B (tenancy, authentication and roles in place; no booking behavior yet)
 - **Blockers:** none
 - **Areas requiring attention:**
   - PHP tests run on SQLite. Move them to PostgreSQL before feat-005, whose locking tests need it. The tenancy tests use only portable SQL. The new migrations ran on PostgreSQL only through `npm run smoke` (the app migrates on start), not under test.
   - The scope-bypass rule is a token scan of our own code; Laravel internals that skip global scopes (validation `unique`/`exists`, queue model restoration) are not covered by it (see `docs/ARCHITECTURE.md`, Tenancy).
+  - The auth Vue pages have component tests for the login and members pages only. The register and password pages are covered through the Pest tests of their routes, not as components. The full UI is feat-012.
+  - Auth performance is graded B: password hashing dominates login, and the members list loads every member of the studio without pagination. Not measured.
   - Tenancy performance is graded B: each scoped query adds one indexed `tenant_id` condition, and each tenant-aware job does one extra lookup of its tenant. Not measured.
   - The launchers and the Compose stack are tested only by running them (`npm run check`, `npm run smoke`); they have no unit tests of their own.
 
@@ -34,6 +37,13 @@ Rate each module on a scale of A (excellent) / B (good) / C (acceptable) / D (ne
   - write guards and fail-closed behaviour;
   - architecture rules for the trait, `tenant_id` indexes and foreign keys, tenant-aware jobs, scope bypasses and middleware order, each rule also fed a violation.
   - Each mechanism was also broken on purpose once (trait removed, bypass added, middleware priority removed, job middleware removed), and the matching tests failed.
+- Session 004 (feat-003) added authentication and roles. Pest now has 116 tests and Vitest 6:
+  - for every protected action (dashboard, log out, members list, role change): each role, a guest and a tenant A session cookie replayed on tenant B, plus `actingAs` a user of another tenant for the two actions behind a policy;
+  - login: the same email in two tenants, credentials of one tenant on the other, remember-me cookies, the per-tenant lockout, session regeneration, and 404 off a tenant subdomain;
+  - registration as customer only, with per-tenant email uniqueness;
+  - per-tenant password reset tokens, links, throttling, expiry and the cross-tenant purge;
+  - architecture rules for `unique`/`exists` validation rules and for auth routes outside the `tenant` middleware, each fed a violation.
+  - Fourteen safeguards were each broken on purpose once (the `Gate::before` check, the token repository, the throttle key, the tenant-aware rule, the two halves of the test request reset, the tenant route group, three policy rules, the registration role, the token lookup, the reset link and the tenant check on the shared user prop). A test failed every time.
 
 ---
 
