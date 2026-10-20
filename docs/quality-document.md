@@ -12,15 +12,17 @@ Rate each module on a scale of A (excellent) / B (good) / C (acceptable) / D (ne
 | web tenancy (`app/Tenancy`, `Tenant`, subdomain middleware) | A | A | A | A | B |
 | web auth and roles (`app/Auth`, `Policies`, `Enums/Role`, auth controllers and pages) | A | A | A | A | B |
 | web studios, staff and classes (settings, invitations, class templates and sessions) | A | A | A | A | B |
+| web bookings (`BookSession`, `Booking`, PostgreSQL concurrency tests) | A | A | A | A | B |
 
 ## Summary
 
-- **Overall Quality Grade:** B (tenancy, authentication, roles, staff and classes in place; no booking behavior yet)
+- **Overall Quality Grade:** B (tenancy, auth, roles, staff, classes and race-safe bookings in place; no cancellation, payments or notifications yet)
 - **Blockers:** none
 - **Areas requiring attention:**
-  - PHP tests run on SQLite. Move them to PostgreSQL before feat-005, whose locking tests need it. The tenancy tests use only portable SQL. The new migrations ran on PostgreSQL only through `npm run smoke` (the app migrates on start), not under test.
+  - Most PHP tests run on SQLite; only the `postgres` group (3 tests) runs on PostgreSQL. Every migration runs on PostgreSQL in that group (each test migrates a fresh database) and in `npm run smoke`, but the rest of the behaviour is tested on SQLite only.
   - The scope-bypass rule is a token scan of our own code; Laravel internals that skip global scopes (validation `unique`/`exists`, queue model restoration) are not covered by it (see `docs/ARCHITECTURE.md`, Tenancy).
   - The auth Vue pages have component tests for the login and members pages only. The register and password pages are covered through the Pest tests of their routes, not as components. The full UI is feat-012.
+  - Bookings performance is graded B: bookings for one session queue on its row lock, and the schedule counts active bookings per session with one grouped subquery. Not measured under load.
   - Studios and classes performance is graded B: the schedule loads every upcoming session with its template and instructor (eager-loaded) and has no pagination or date window yet. Not measured.
   - The new Vue pages have component tests for the Join and Members pages only; the Settings, Classes and Schedule pages are covered through the Pest tests of their routes. The full UI is feat-012.
   - Auth performance is graded B: password hashing dominates login, and the members list loads every member of the studio without pagination. Not measured.
@@ -54,6 +56,11 @@ Rate each module on a scale of A (excellent) / B (good) / C (acceptable) / D (ne
   - class templates and sessions: per-studio name uniqueness, 404 for another studio's records, validation of template, instructor and time, timezone conversion, and composite foreign keys that refuse a cross-studio reference in the database;
   - a new architecture rule for foreign keys between tenant-owned tables, fed a violation.
   - Twenty safeguards were each broken on purpose once by a script, and a test failed every time.
+- Session 006 (feat-005) added bookings and the PostgreSQL test database. Pest now has 281 tests on SQLite plus 3 on PostgreSQL, and Vitest 13:
+  - parallel booking on PostgreSQL in separate processes: eight customers race for the last place (exactly one booking), and one customer's five identical requests (exactly one booking). With the row lock removed, all eight got in, and the test failed;
+  - the booking rules on SQLite: full, started and already booked are refused; released bookings neither count nor block; another studio's session is a 404; capacity cannot drop below bookings; database-level refusals;
+  - the booking route in the role matrix.
+  - Eleven safeguards were each broken on purpose once (the row lock on PostgreSQL, ten on SQLite), and a test failed every time.
 
 ---
 

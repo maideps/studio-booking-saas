@@ -6,6 +6,7 @@ use App\Http\Controllers\Auth\ForgotPasswordController;
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\RegisterController;
 use App\Http\Controllers\Auth\ResetPasswordController;
+use App\Http\Controllers\BookingController;
 use App\Http\Controllers\ClassSessionController;
 use App\Http\Controllers\ClassTemplateController;
 use App\Http\Controllers\DashboardController;
@@ -14,6 +15,7 @@ use App\Http\Controllers\JoinController;
 use App\Http\Controllers\MemberController;
 use App\Http\Controllers\MemberRoleController;
 use App\Http\Controllers\StudioSettingsController;
+use App\Models\Booking;
 use App\Models\ClassSession;
 use App\Models\ClassTemplate;
 use App\Models\Invitation;
@@ -98,5 +100,9 @@ Route::middleware('tenant')->group(function (): void {
         Route::put('/schedule/{classSession}', [ClassSessionController::class, 'update'])
             ->name('schedule.update')
             ->can('update', 'classSession');
+
+        Route::post('/schedule/{classSession}/bookings', [BookingController::class, 'store'])
+            ->name('bookings.store')
+            ->can('create', [Booking::class, 'classSession']);
     });
 });

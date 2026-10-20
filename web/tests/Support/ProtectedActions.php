@@ -76,6 +76,7 @@ final readonly class ProtectedActions
             'schedule a session' => new self('POST', '/schedule', $managers, true, $classSession),
             'edit session page' => new self('GET', '/schedule/{classSession}/edit', $managers, true, $none),
             'update a session' => new self('PUT', '/schedule/{classSession}', $managers, true, $classSession),
+            'book a session' => new self('POST', '/schedule/{classSession}/bookings', [Role::Customer], true, $none),
         ];
     }
 

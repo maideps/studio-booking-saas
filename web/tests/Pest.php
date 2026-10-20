@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Enums\Role;
 use App\Models\Tenant;
 use App\Models\User;
+use Illuminate\Foundation\Testing\DatabaseMigrations;
 use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
 use Illuminate\Testing\TestResponse;
 use Symfony\Component\HttpFoundation\Response;
@@ -14,6 +15,11 @@ use Tests\TestCase;
 use function Pest\Laravel\post;
 
 pest()->extend(TestCase::class)->use(LazilyRefreshDatabase::class)->in('Feature');
+
+// Tests that need PostgreSQL (row locks, parallel processes). Their data must be committed
+// so other PHP processes can see it, so each test migrates a fresh database instead of
+// running inside a transaction. tools/test-postgres.mjs runs them; on SQLite they skip.
+pest()->extend(TestCase::class)->use(DatabaseMigrations::class)->group('postgres')->in('Concurrency');
 
 /**
  * Two tenants, "studio-a" and "studio-b", for isolation tests.

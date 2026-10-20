@@ -15,7 +15,7 @@ Early build. The project skeleton (feat-001) is in place: the Laravel app in [`w
 - staff invitations by emailed link;
 - class templates and a schedule of sessions with an instructor, a time and a capacity.
 
-The database itself refuses a session that points at another studio's class or instructor (see [Studios, staff and classes](docs/ARCHITECTURE.md#studios-staff-and-classes)). Bookings with capacity locking come next (feat-005). The 14-feature plan is in [`feature_list.json`](feature_list.json); the current state is in [`PROGRESS.md`](PROGRESS.md) and the hand-off for the next session is in [`session-handoff.md`](session-handoff.md).
+The database itself refuses a session that points at another studio's class or instructor (see [Studios, staff and classes](docs/ARCHITECTURE.md#studios-staff-and-classes)). Bookings (feat-005) are built: customers book places from the schedule. A row lock on the session means parallel requests never overbook it, and a unique index means a customer never holds two places in one session. A test on a real PostgreSQL proves both with racing processes (see [Bookings](docs/ARCHITECTURE.md#bookings)). Cancellation and the waitlist come next (feat-006). The 14-feature plan is in [`feature_list.json`](feature_list.json); the current state is in [`PROGRESS.md`](PROGRESS.md) and the hand-off for the next session is in [`session-handoff.md`](session-handoff.md).
 
 ## Quick Start
 
@@ -45,7 +45,7 @@ To try sign-in, seed the demo studio (`docker compose exec app php artisan db:se
 
 - **Node.js** ≥ 20.19 — the harness runtime and the front-end build (Vite 8); `.nvmrc` pins the version CI uses
 - **PHP** ≥ 8.3 with Composer, and the `intl`, `pdo_sqlite` and `pdo_pgsql` extensions (Laravel Herd provides all of them on Windows and macOS)
-- **Docker** with Compose — for `docker compose up` and `npm run smoke`
+- **Docker** with Compose — for `npm run test` (its PostgreSQL concurrency tests start a throwaway database), `docker compose up` and `npm run smoke`
 - **Make** — optional; `npm run <target>` mirrors every make target
 
 ## Verification Layers
@@ -54,7 +54,7 @@ To try sign-in, seed the demo studio (`docker compose exec app php artisan db:se
 |-------|---------|----------------|
 | 1 | `make lint` / `npm run lint` | Harness lint, Pint (PHP formatting, strict types), ESLint |
 | 1b | `make typecheck` / `npm run typecheck` | Harness checks, Larastan (level 8), vue-tsc (strict) |
-| 2 | `make test` / `npm run test` | Harness tests, Pest, Vitest |
+| 2 | `make test` / `npm run test` | Harness tests, Pest on SQLite, Pest concurrency tests on a throwaway PostgreSQL, Vitest |
 | 3 | `make build` / `npm run build` | Harness build check, Vite production build |
 | 3b | `make e2e` / `npm run e2e` | End-to-end tests (the harness's own for now; the product's Playwright suite arrives in feat-013) |
 

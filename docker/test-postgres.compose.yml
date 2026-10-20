@@ -1,0 +1,20 @@
+# A throwaway PostgreSQL for the tests that need it (D-005), started and removed by
+# tools/test-postgres.mjs. Same image as the app stack; data lives in memory only.
+name: studio-booking-test
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: studio_booking_test
+      POSTGRES_USER: studio_booking
+      POSTGRES_PASSWORD: studio_booking
+    ports:
+      - "127.0.0.1:${TEST_DB_PORT:-55432}:5432"
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U studio_booking -d studio_booking_test"]
+      interval: 1s
+      timeout: 5s
+      retries: 60

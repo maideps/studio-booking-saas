@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Requests\Classes;
 
 use App\Enums\Role;
+use App\Models\ClassSession;
 use App\Models\ClassTemplate;
 use App\Models\Tenant;
 use App\Models\User;
@@ -43,7 +44,17 @@ final class ClassSessionRequest extends FormRequest
                     }
                 },
             ],
-            'capacity' => ['required', 'integer', 'min:1', 'max:500'],
+            'capacity' => [
+                'required', 'integer', 'min:1', 'max:500',
+                // A rescheduled session keeps a place for everyone already booked.
+                function (string $attribute, mixed $value, Closure $fail): void {
+                    $session = $this->route('classSession');
+
+                    if ($session instanceof ClassSession && is_numeric($value) && (int) $value < $session->activeBookingCount()) {
+                        $fail(__('The capacity cannot be lower than the :count places already booked.', ['count' => $session->activeBookingCount()]));
+                    }
+                },
+            ],
         ];
     }
 

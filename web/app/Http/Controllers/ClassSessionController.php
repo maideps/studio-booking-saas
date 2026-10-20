@@ -7,11 +7,13 @@ namespace App\Http\Controllers;
 use App\Actions\Classes\ScheduleClassSession;
 use App\Enums\Role;
 use App\Http\Requests\Classes\ClassSessionRequest;
+use App\Models\Booking;
 use App\Models\ClassSession;
 use App\Models\ClassTemplate;
 use App\Models\Tenant;
 use App\Models\User;
 use App\Tenancy\TenantContext;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -31,9 +33,12 @@ final class ClassSessionController extends Controller
         assert($actor instanceof User);
         $tenant = $this->context->currentOrFail();
 
+        $bookedByActor = Booking::query()->active()->where('customer_id', $actor->id)->pluck('class_session_id')->all();
+
         $sessions = ClassSession::query()
             ->upcoming()
             ->with(['classTemplate', 'instructor'])
+            ->withCount(['bookings as active_bookings_count' => fn (Builder $query) => $query->where('active', true)])
             ->get()
             ->map(fn (ClassSession $session): array => [
                 'id' => $session->id,
@@ -42,6 +47,9 @@ final class ClassSessionController extends Controller
                 'startsAt' => $tenant->localTime($session->starts_at)->format(Tenant::LOCAL_TIME_FORMAT),
                 'endsAt' => $tenant->localTime($session->ends_at)->format(Tenant::LOCAL_TIME_FORMAT),
                 'capacity' => $session->capacity,
+                'placesLeft' => max(0, $session->capacity - (int) $session->getAttribute('active_bookings_count')),
+                'bookedByMe' => in_array($session->id, $bookedByActor, true),
+                'canBook' => $actor->can('create', [Booking::class, $session]),
                 'canUpdate' => $actor->can('update', $session),
             ]);
 

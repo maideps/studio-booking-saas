@@ -89,7 +89,9 @@ Product directories (declared in `.harness/manifest.json` as `productRoots`):
 
 The root `lint`, `typecheck`, `test` and `build` scripts run the harness's own check first, then the product tools through `tools/`. Each tool runs only after the previous one passes.
 
-PHP tests run on SQLite in memory (set in `web/phpunit.xml`, D-005), so `npm run test` needs no containers. The Compose stack and production-like runs use PostgreSQL. Tests that depend on PostgreSQL behaviour, such as the row locks in feat-005, will need a PostgreSQL test database.
+Most PHP tests run on SQLite in memory (set in `web/phpunit.xml`, D-005). The tests that depend on PostgreSQL behaviour, such as row locks under parallel requests, are in the `postgres` group in `web/tests/Concurrency/`. On SQLite they are skipped.
+
+`tools/test-postgres.mjs` runs that group against a throwaway PostgreSQL 17 container (`docker/test-postgres.compose.yml`, port 55432, data in memory) and removes the container afterwards. `npm run test` runs it after the SQLite suite, so `npm run test` needs Docker and fails clearly without it. These tests migrate a fresh database per test and commit their data, because they start separate PHP processes that must see it. The Compose stack and production-like runs use PostgreSQL.
 
 Layering inside `web/app/` (dependencies point downward only):
 
@@ -229,3 +231,30 @@ Studio settings, staff invitations, class templates and scheduled class sessions
 - **Not built yet:**
   - deleting templates or sessions;
   - bookings against the capacity (feat-005).
+
+### Bookings
+
+Customers book places in class sessions (feat-005, D-010). The code is `web/app/Actions/Bookings/BookSession.php`, `web/app/Models/Booking.php`, `BookingPolicy`, `BookingController` and `App\Exceptions\BookingRefused`.
+
+- **Table.** `bookings` is tenant-owned: `class_session_id`, `customer_id`, `active` and timestamps.
+  - Composite foreign keys (`tenant_id`, …) point to `class_sessions` and `users` (D-009). `class_sessions` has the unique (`tenant_id`, `id`) index they need.
+  - `active` is `true` while a booking holds a place and `NULL` once it is released. It is never `false`.
+  - The unique index `bookings_one_active_per_customer` on (`tenant_id`, `class_session_id`, `customer_id`, `active`) allows one active booking per customer and session. NULLs are distinct in unique indexes in PostgreSQL and SQLite, so released bookings never block rebooking.
+- **Booking.** `BookSession` runs in one transaction:
+  1. lock the session row (`lockForUpdate()`, `SELECT … FOR UPDATE`);
+  2. refuse a session that has started;
+  3. refuse a second active booking by the customer;
+  4. count the active bookings and refuse when the session is full;
+  5. insert the booking.
+
+  Bookings for one session therefore run one after another, and the count never misses a booking still being committed. A racing duplicate that reaches the unique index gets the same "already booked" answer. Refusals are `BookingRefused` exceptions with a message for the customer.
+- **HTTP.**
+  - `POST /schedule/{classSession}/bookings` books the signed-in customer. `BookingPolicy::create` allows customers only, inside their own studio.
+  - A refusal comes back as the `booking` error on the schedule.
+  - The schedule shows the places left, whether the customer has booked each session, and a Book button.
+- **Capacity edits.** A session's capacity cannot be set below its active bookings.
+- **Tests.**
+  - `web/tests/Feature/Bookings/BookingTest.php` covers the rules on SQLite.
+  - `web/tests/Concurrency/ParallelBookingTest.php` proves them on PostgreSQL. It starts one PHP process per attempt (`web/tests/Support/Concurrency/attempt-booking.php`) and releases them all at once with a go file. Each attempt holds its transaction open for 300 ms after booking.
+  - Eight customers racing for the last place get exactly one booking. Five identical requests from one customer get exactly one booking.
+  - With the row lock removed, all eight customers got in. The test fails then.

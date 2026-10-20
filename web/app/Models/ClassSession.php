@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /**
  * One scheduled occurrence of a class template, with its own instructor,
@@ -37,6 +38,22 @@ class ClassSession extends Model
     public function classTemplate(): BelongsTo
     {
         return $this->belongsTo(ClassTemplate::class);
+    }
+
+    /**
+     * @return HasMany<Booking, $this>
+     */
+    public function bookings(): HasMany
+    {
+        return $this->hasMany(Booking::class);
+    }
+
+    /**
+     * Bookings that hold a place.
+     */
+    public function activeBookingCount(): int
+    {
+        return $this->bookings()->active()->count();
     }
 
     /**

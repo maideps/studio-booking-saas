@@ -170,3 +170,21 @@ Policies also need a rule for a user who is signed in but belongs to another ten
 **Consequences:**
 - Positive: a session can never point at another studio's template or instructor, whatever code writes it, and a test proves it. Invitation links are single-use, studio-bound and safe to store.
 - Negative: every new reference between tenant-owned tables needs the composite key and the parent's (`tenant_id`, `id`) index. An architecture rule fails on a single-column foreign key between tenant-owned tables. Changing a studio's timezone keeps every class at the same instant, which moves its wall-clock time.
+
+### D-010: Bookings lock the session row, and one active booking per customer is a unique index
+
+**Date:** 2026-10-20
+**Status:** accepted
+**Context:** A session has a fixed capacity, and two customers can ask for its last place at the same moment. A plain "count, then insert" lets both requests read the same count and both insert. A customer double-clicking can create two bookings in the same way. D-005 deferred PostgreSQL tests until this behaviour needed them.
+**Decision:**
+- **Locking.** `BookSession` locks the session row with `SELECT … FOR UPDATE` inside a transaction, then checks and inserts. Bookings for one session are serialized by the database; bookings for different sessions never wait for each other.
+- **One active booking.** "One active booking per customer and session" is also a unique index, over (`tenant_id`, `class_session_id`, `customer_id`, `active`), where `active` is `true` or `NULL`, never `false`. Released bookings (feat-006) set `active` to `NULL` and drop out of the index, because unique indexes treat NULLs as distinct. A violation from a racing duplicate is reported as "already booked".
+- **PostgreSQL tests.** The tests that need PostgreSQL run in the `postgres` group against a throwaway container started by `tools/test-postgres.mjs`, as part of `npm run test`. The concurrency tests use separate PHP processes with their own connections, released together, and each attempt holds its transaction open briefly so that a missing lock shows up every time.
+**Alternatives considered:**
+- An atomic conditional update of a `booked_count` column (`UPDATE … SET booked_count = booked_count + 1 WHERE booked_count < capacity`) — Rejected for now: it needs a second source of truth that cancellation and promotion (feat-006) must keep in sync. The row lock keeps the active bookings themselves as the only truth, and `docs/ARCHITECTURE.md` already named the row lock as the design.
+- A PostgreSQL partial unique index (`WHERE active`) — Rejected: Laravel's schema builder cannot declare it, and a raw statement would be a reviewed exception to the scope-bypass rule. The nullable column gives the same guarantee on both databases.
+- Parallel HTTP requests against `php artisan serve` — Rejected: the built-in server handles one request at a time on Windows, so the requests would not overlap.
+- Moving the whole suite to PostgreSQL — Rejected for now: it would slow every test for behaviour that only a few tests exercise.
+**Consequences:**
+- Positive: parallel requests cannot overbook a session or double-book a customer, and a test on the real database shows it, including that the test fails without the lock.
+- Negative: `npm run test` needs Docker. A busy session's bookings queue on its row lock; that is fine at studio scale. `active` must never be set to `false`: two released bookings of the same customer and session would then collide in the index.

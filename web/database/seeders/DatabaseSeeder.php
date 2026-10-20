@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Database\Seeders;
 
+use App\Actions\Bookings\BookSession;
 use App\Models\ClassSession;
 use App\Models\ClassTemplate;
 use App\Models\Tenant;
@@ -14,8 +15,8 @@ class DatabaseSeeder extends Seeder
 {
     /**
      * Seed the application's database: a demo studio with one member per
-     * role, all with the factory password ("password"), two classes and a
-     * week of sessions.
+     * role, all with the factory password ("password"), two classes, a week
+     * of sessions and one booking.
      *
      * Model events stay on: they fill tenant_id and guard tenant writes.
      */
@@ -31,7 +32,7 @@ class DatabaseSeeder extends Seeder
         $tenant->run(function () use ($tenant): void {
             User::factory()->owner()->create(['name' => 'Olivia Owner', 'email' => 'owner@example.com']);
             $staff = User::factory()->staff()->create(['name' => 'Sam Staff', 'email' => 'staff@example.com']);
-            User::factory()->customer()->create(['name' => 'Casey Customer', 'email' => 'customer@example.com']);
+            $customer = User::factory()->customer()->create(['name' => 'Casey Customer', 'email' => 'customer@example.com']);
 
             $classes = [
                 ['name' => 'Morning Flow', 'description' => 'A gentle start to the day.', 'duration_minutes' => 60, 'capacity' => 12, 'local_time' => '07:30'],
@@ -44,13 +45,17 @@ class DatabaseSeeder extends Seeder
                 foreach (range(1, 5) as $day) {
                     $startsAt = $tenant->parseLocalTime(now($tenant->timezone)->addDays($day)->format('Y-m-d').'T'.$class['local_time']);
 
-                    ClassSession::factory()->create([
+                    $session = ClassSession::factory()->create([
                         'class_template_id' => $template->id,
                         'instructor_id' => $staff->id,
                         'starts_at' => $startsAt,
                         'ends_at' => $startsAt->addMinutes($template->duration_minutes),
                         'capacity' => $template->capacity,
                     ]);
+
+                    if ($class['name'] === 'Morning Flow' && $day === 1) {
+                        app(BookSession::class)->handle($session, $customer);
+                    }
                 }
             }
         });
