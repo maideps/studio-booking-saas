@@ -8,6 +8,7 @@ use Illuminate\Testing\TestResponse;
 use Inertia\Testing\AssertableInertia as Assert;
 use Symfony\Component\HttpFoundation\Response;
 use Tests\Support\ProtectedActions;
+use Tests\Support\StudioFixture;
 
 use function Pest\Laravel\assertDatabaseHas;
 use function Pest\Laravel\assertGuest;
@@ -98,18 +99,19 @@ it('does not sign in on tenant B with a tenant A remember-me cookie', function (
     $tenants->b->run(fn () => assertGuest());
 });
 
-it('denies every protected action on tenant B to a tenant A session', function (string $method, string $path): void {
+it('denies every protected action on tenant B to a tenant A session', function (ProtectedActions $action): void {
     $tenants = twoTenants();
     member($tenants->a, Role::Owner, ['email' => 'alice@example.com']);
-    $bob = member($tenants->b, Role::Customer);
+    $studioB = StudioFixture::create($tenants->b);
     $cookies = browserCookies(signIn($tenants->a, 'alice@example.com'));
 
     startNewRequest();
     withCookies($cookies)
-        ->call($method, tenantUrl($tenants->b, ProtectedActions::path($path, $bob->id)), ['role' => 'owner'])
+        ->call($action->method, $studioB->url($action->path), ($action->payload)($studioB))
         ->assertRedirect(tenantUrl($tenants->b, '/login'));
 
-    expect($tenants->b->run(fn () => User::query()->findOrFail($bob->id)->role))->toBe(Role::Customer);
+    expect($tenants->b->run(fn () => User::query()->findOrFail($studioB->member->id)->role))->toBe(Role::Customer)
+        ->and($tenants->b->fresh()?->name)->toBe('Studio B');
 
     // The visit to tenant B did not sign Alice out of tenant A.
     startNewRequest();

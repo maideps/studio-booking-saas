@@ -17,7 +17,7 @@ function logout(): void {
 <template>
     <div class="min-h-screen">
         <header class="border-b border-stone-200 bg-white">
-            <nav class="mx-auto flex max-w-4xl items-center gap-6 px-6 py-3">
+            <nav class="mx-auto flex max-w-4xl flex-wrap items-center gap-x-6 gap-y-2 px-6 py-3">
                 <span class="font-semibold">{{ page.props.tenant?.name }}</span>
                 <Link
                     href="/dashboard"
@@ -26,11 +26,30 @@ function logout(): void {
                     Dashboard
                 </Link>
                 <Link
-                    v-if="user?.canViewMembers"
+                    href="/schedule"
+                    class="text-sm text-stone-600 hover:text-stone-900"
+                >
+                    Schedule
+                </Link>
+                <Link
+                    href="/classes"
+                    class="text-sm text-stone-600 hover:text-stone-900"
+                >
+                    Classes
+                </Link>
+                <Link
+                    v-if="user?.can.viewMembers"
                     href="/members"
                     class="text-sm text-stone-600 hover:text-stone-900"
                 >
                     Members
+                </Link>
+                <Link
+                    v-if="user?.can.updateSettings"
+                    href="/settings"
+                    class="text-sm text-stone-600 hover:text-stone-900"
+                >
+                    Settings
                 </Link>
                 <span class="ml-auto text-sm text-stone-500">{{ user?.name }} ({{ user?.role }})</span>
                 <button

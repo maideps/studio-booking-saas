@@ -370,6 +370,24 @@ final class TenancyArchitecture
     }
 
     /**
+     * Foreign keys from the table to another tenant-owned table that do not
+     * carry tenant_id (D-009). A key on (tenant_id, x_id) referencing the
+     * parent's (tenant_id, id) lets the database refuse a row of another
+     * tenant; a key on x_id alone does not.
+     *
+     * @param  list<string>  $tenantTables
+     * @return list<string>
+     */
+    public static function crossTenantForeignKeys(string $table, array $tenantTables): array
+    {
+        return array_values(collect(Schema::getForeignKeys($table))
+            ->filter(fn (array $key): bool => in_array($key['foreign_table'], $tenantTables, true)
+                && ! ($key['columns'][0] === 'tenant_id' && $key['foreign_columns'][0] === 'tenant_id'))
+            ->map(fn (array $key): string => sprintf('%s.%s references %s without tenant_id', $table, implode(',', $key['columns']), $key['foreign_table']))
+            ->all());
+    }
+
+    /**
      * The last segment of a name token (`DB`, `\Illuminate\Support\Facades\DB`).
      */
     private static function shortName(PhpToken $token): ?string

@@ -147,3 +147,26 @@ Policies also need a rule for a user who is signed in but belongs to another ten
 **Consequences:**
 - Positive: a session, remember-me cookie, reset token or rate-limit lockout from one tenant has no effect in another, and tests prove each case. New policies get the tenant check for free.
 - Negative: `TenantPasswordBrokerManager` overrides a protected Laravel method, so a Laravel upgrade could break it (the password reset tests would fail). The broker's `table`, `connection` and `driver` options no longer apply. Central tables, such as tenant slugs at signup, will need their own reviewed exception to the validation-rule check.
+
+### D-009: Cross-tenant references are refused by the database, and invitations are single-use hashed links
+
+**Date:** 2026-10-20
+**Status:** accepted
+**Context:** feat-004 adds the first tenant-owned rows that point at other tenant-owned rows: a class session points at a class template and at an instructor (a user). Validation (`TenantRule::exists`) stops a form from sending another studio's id. But a seeder, a console command or a future code path could still write one, and a plain foreign key on `class_template_id` only checks that the template exists in some studio. feat-004 also adds staff invitations, which must work only on the studio that sent them and only once.
+**Decision:**
+- **Composite foreign keys.** A reference from a tenant-owned row to another tenant-owned row is a composite foreign key on (`tenant_id`, `<reference>_id`) to the parent's (`tenant_id`, `id`). The parent table gets a unique (`tenant_id`, `id`) index for it: `users` and `class_templates` have one now. Tenant-owned tables keep their own `tenant_id` foreign key to `tenants`, so the architecture rule from D-007 still applies.
+- **Invitations.** An invitation is a tenant-owned row with one pending invitation per (`tenant_id`, `email`). Inviting the same email again replaces it.
+  - The link carries a 40-character random token. Only its SHA-256 hash is stored, so a token can be looked up without a slow hash and is useless if read from the database.
+  - The token is looked up through the tenant scope, so it only works on the sending studio's subdomain.
+  - The invitation is deleted when accepted and expires after 7 days.
+  - An existing account with the invited email must be signed in to accept. A different signed-in user cannot accept. Accepting never demotes an owner.
+- **Settings.** Studio settings (`timezone`, `contact_email`) are columns on the central `tenants` table. The settings controller always edits the tenant from the context, and `TenantPolicy::update` also checks that the tenant is the current one.
+- **Time.** Class times are stored as UTC timestamps, and the studio timezone is applied only for input and display (`Tenant::parseLocalTime()` and `Tenant::localTime()`).
+**Alternatives considered:**
+- Validation only — Rejected: it protects one form, not the data. The composite key protects every write path and costs one extra index per parent table.
+- A separate tenant-owned `studio_settings` table — Rejected for now: a one-to-one table for three columns. Settings that grow later can move.
+- Bcrypt-hashed invitation tokens, like password resets — Rejected: lookup by token would need the email in the link as well. A SHA-256 hash of a long random token is enough when the token is single-use and expires.
+- Storing class times in the studio timezone — Rejected: a timezone change would silently move every class.
+**Consequences:**
+- Positive: a session can never point at another studio's template or instructor, whatever code writes it, and a test proves it. Invitation links are single-use, studio-bound and safe to store.
+- Negative: every new reference between tenant-owned tables needs the composite key and the parent's (`tenant_id`, `id`) index. An architecture rule fails on a single-column foreign key between tenant-owned tables. Changing a studio's timezone keeps every class at the same instant, which moves its wall-clock time.

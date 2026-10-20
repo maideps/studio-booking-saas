@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Middleware;
 
+use App\Models\ClassTemplate;
 use App\Models\User;
 use App\Tenancy\TenantContext;
 use Illuminate\Http\Request;
@@ -43,7 +44,12 @@ class HandleInertiaRequests extends Middleware
                     'name' => $user->name,
                     'email' => $user->email,
                     'role' => $user->role->value,
-                    'canViewMembers' => $user->can('viewAny', User::class),
+                    // What the navigation may offer; every route still authorizes itself.
+                    'can' => [
+                        'viewMembers' => $user->can('viewAny', User::class),
+                        'manageClasses' => $user->can('create', ClassTemplate::class),
+                        'updateSettings' => $user->can('update', $tenant),
+                    ],
                 ] : null,
             ],
         ];

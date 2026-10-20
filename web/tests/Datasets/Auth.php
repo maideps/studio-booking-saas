@@ -11,4 +11,6 @@ dataset('roles', [
     'customer' => Role::Customer,
 ]);
 
-dataset('protected actions', ProtectedActions::ALL);
+dataset('protected actions', fn (): array => ProtectedActions::dataset());
+
+dataset('protected actions by role', fn (): array => ProtectedActions::withRoles());

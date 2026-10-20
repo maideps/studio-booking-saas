@@ -42,6 +42,14 @@ function member(Tenant $tenant, Role $role = Role::Customer, array $attributes =
 }
 
 /**
+ * The user's role as stored now, read inside the user's own tenant.
+ */
+function roleOf(User $user): Role
+{
+    return $user->tenant()->firstOrFail()->run(fn () => User::query()->findOrFail($user->id)->role);
+}
+
+/**
  * Signs in through the real login form on the tenant's subdomain.
  *
  * @return TestResponse<Response>

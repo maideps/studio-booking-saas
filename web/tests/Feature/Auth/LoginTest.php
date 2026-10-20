@@ -6,6 +6,7 @@ use App\Enums\Role;
 use App\Http\Requests\Auth\LoginRequest;
 use Inertia\Testing\AssertableInertia as Assert;
 use Tests\Support\ProtectedActions;
+use Tests\Support\StudioFixture;
 
 use function Pest\Laravel\assertAuthenticatedAs;
 use function Pest\Laravel\assertGuest;
@@ -123,10 +124,10 @@ it('signs a member out', function (Role $role): void {
     $tenants->a->run(fn () => assertGuest());
 })->with('roles');
 
-it('sends a guest from a protected page to the tenant login', function (string $method, string $path): void {
+it('sends a guest from a protected page to the tenant login', function (ProtectedActions $action): void {
     $tenants = twoTenants();
-    $bob = member($tenants->a, Role::Customer);
+    $studio = StudioFixture::create($tenants->a);
 
-    call($method, tenantUrl($tenants->a, ProtectedActions::path($path, $bob->id)))
+    call($action->method, $studio->url($action->path), ($action->payload)($studio))
         ->assertRedirect(tenantUrl($tenants->a, '/login'));
 })->with('protected actions');

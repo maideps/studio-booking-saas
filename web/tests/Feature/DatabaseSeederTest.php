@@ -3,12 +3,14 @@
 declare(strict_types=1);
 
 use App\Enums\Role;
+use App\Models\ClassSession;
+use App\Models\ClassTemplate;
 use App\Models\Tenant;
 use App\Models\User;
 
 use function Pest\Laravel\seed;
 
-it('seeds a demo tenant with one member per role', function (): void {
+it('seeds a demo tenant with one member per role, classes and upcoming sessions', function (): void {
     seed();
 
     $tenant = Tenant::query()->where('slug', 'demo')->firstOrFail();
@@ -21,5 +23,8 @@ it('seeds a demo tenant with one member per role', function (): void {
         'customer@example.com' => Role::Customer,
         'owner@example.com' => Role::Owner,
         'staff@example.com' => Role::Staff,
-    ]);
+    ])
+        ->and($tenant->timezone)->toBe('Europe/Madrid')
+        ->and($tenant->run(fn () => ClassTemplate::query()->orderBy('name')->pluck('name')->all()))->toBe(['Evening Pilates', 'Morning Flow'])
+        ->and($tenant->run(fn () => ClassSession::query()->upcoming()->count()))->toBe(10);
 });

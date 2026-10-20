@@ -138,6 +138,7 @@ The mechanism from D-002 and D-007 lives in `web/app/Tenancy/` and `web/app/Mode
 - **Enforcement:** the tests are in `web/tests/Feature/Tenancy/TenancyArchitectureTest.php`, and the checks they run are in `web/tests/Support/TenancyArchitecture.php`.
   - Every Eloquent model under `app/`, except the central `Tenant`, uses `BelongsToTenant`.
   - Every tenant-owned table has an index that starts with `tenant_id`, and a foreign key from it to `tenants`.
+  - Every foreign key from a tenant-owned table to another tenant-owned table is composite, on (`tenant_id`, `<reference>_id`) to the parent's (`tenant_id`, `id`). The database then refuses a row of another tenant (D-009).
   - Every queued job under `app/` is a `TenantAwareJob`, unless it is listed in `CENTRAL_JOBS`.
   - No code in `app/`, `routes/` or `database/` other than `CrossTenant`:
     - drops global scopes (`withoutGlobalScope*`, `newQueryWithoutScope*`, `newModelQuery`, `getQuery`);
@@ -181,9 +182,50 @@ Login, registration and roles from D-008 build on the tenancy mechanism. The cod
   - The reset link is built from the user's tenant with `Tenant::url()` (scheme and port from `APP_URL`), so it is right outside a request too.
   - The forgot-password form answers the same way whether or not the email is a member.
 - **Validation.** `unique` and `exists` rules on tenant-owned tables go through `TenantRule::unique()` / `TenantRule::exists()`, which add the current `tenant_id`. An architecture rule fails on any other use of those rules in `app/`, `routes/` or `database/`.
-- **Shared Inertia props** (`HandleInertiaRequests`): `tenant` (name, slug) and `auth.user` (id, name, email, role, `canViewMembers`). Both are null off a tenant subdomain, where resolving the user would fail closed.
+- **Shared Inertia props** (`HandleInertiaRequests`): `tenant` (name, slug) and `auth.user` (id, name, email, role). `auth.user.can` holds `viewMembers`, `manageClasses` and `updateSettings`, so the navigation only offers what the role may use. Both props are null off a tenant subdomain, where resolving the user would fail closed.
 - **Tests.**
-  - `web/tests/Feature/Auth/` and `web/tests/Feature/Members/` cover every protected action for each role, for a guest and for a user of another tenant. `Tests\Support\ProtectedActions` lists the actions, and a test fails when a route with `auth` middleware is missing from that list.
+  - `Tests\Support\ProtectedActions` lists every route that needs a signed-in user, with the roles allowed and a valid payload. A test fails when a route with `auth` middleware is missing from the list.
+  - Every action is run against a `StudioFixture` (one member per role, plus one record of each kind):
+    - for each role: allowed roles succeed, the others get 403 (`web/tests/Feature/Authorization/RoleMatrixTest.php`);
+    - for an owner of another studio (403);
+    - for a guest (redirect to login);
+    - for a replayed session of another studio (a guest).
   - A user of another tenant is tested two ways. A real tenant-A session cookie replayed on tenant B leaves them a guest. `actingAs` on tenant B gets a 403 from `Gate::before`.
   - In tests, Laravel keeps the guard's user and the session's attributes between requests. Cookie-replay tests call `startNewRequest()` (`web/tests/Pest.php`) first, and each one also shows that a request without the cookie is a guest.
   - The suite uses the `database` session driver (`phpunit.xml`).
+
+### Studios, staff and classes
+
+Studio settings, staff invitations, class templates and scheduled class sessions (feat-004, D-009). The code is in `web/app/Http/Controllers/` (`StudioSettingsController`, `InvitationController`, `JoinController`, `ClassTemplateController`, `ClassSessionController`), `web/app/Actions/Members/`, `web/app/Actions/Classes/` and the models `Invitation`, `ClassTemplate` and `ClassSession`.
+
+- **Settings** (`/settings`, owners).
+  - `timezone` and `contact_email` are columns on the central `tenants` table, next to `name`.
+  - The controller always edits the tenant from the context, never one named in the request. `TenantPolicy::update` also checks that the tenant is the current one.
+- **Invitations** (owners).
+  - `POST /invitations` stores one pending invitation per (`tenant_id`, `email`); a new one replaces the old.
+  - The invitation has a 40-character random token, of which only the SHA-256 hash is stored, and it expires after 7 days (`Invitation::VALID_DAYS`).
+  - The `StaffInvitation` mail is sent right away (queued mail is feat-009). It links to `/join/{token}` on the studio's subdomain (`Tenant::url()`).
+  - Inviting an email that is already an owner or staff member is refused. A customer may be invited to become staff.
+  - `/join/{token}` looks the token up through the tenant scope, so the link only works on the sending studio. Wrong, expired and other-studio tokens are all a 404.
+  - **Accepting** deletes the invitation:
+    - with no account in the studio, the invitee creates one with the invited role and is signed in;
+    - with an account, that account must be signed in, and is brought back to the link after logging in;
+    - a different signed-in user gets a 403;
+    - accepting never demotes an owner.
+  - `DELETE /invitations/{invitation}` revokes one. The members page lists pending invitations to owners only.
+- **Class templates** (`/classes`): name (unique per studio, through `TenantRule::unique`), description, `duration_minutes` and a default `capacity`. Every member can list them; owners and staff create and edit them (`ClassTemplatePolicy`).
+- **Class sessions** (`/schedule`).
+  - Each session has a template, an instructor, `starts_at`, `ends_at` and `capacity`. The end is always the start plus the template duration (`ScheduleClassSession`).
+  - Every member sees upcoming sessions; owners and staff schedule and edit them (`ClassSessionPolicy`).
+  - Validation requires the template and the instructor to be in this studio, through `TenantRule::exists`, and the instructor to be an owner or staff member. The start must be in the future.
+- **Time.**
+  - Times are stored as UTC timestamps.
+  - Forms send and pages receive wall-clock time in the studio timezone, as `YYYY-MM-DDTHH:mm` (`Tenant::LOCAL_TIME_FORMAT`). `Tenant::parseLocalTime()` converts it to UTC and `Tenant::localTime()` converts back.
+  - Changing the studio timezone keeps every session at the same instant.
+- **Cross-tenant references.**
+  - `class_sessions` references `class_templates` and `users`, and `invitations` references its inviter in `users`. Each of these is a composite foreign key on (`tenant_id`, `<reference>_id`), so the database refuses a reference to another studio's row even when validation is skipped.
+  - `users` and `class_templates` have the unique (`tenant_id`, `id`) index these keys need.
+  - An architecture rule (`TenancyArchitecture::crossTenantForeignKeys`) fails on a single-column foreign key between tenant-owned tables.
+- **Not built yet:**
+  - deleting templates or sessions;
+  - bookings against the capacity (feat-005).

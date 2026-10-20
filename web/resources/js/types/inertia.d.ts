@@ -8,7 +8,12 @@ export interface AuthUser {
     name: string;
     email: string;
     role: Role;
-    canViewMembers: boolean;
+    /** What the navigation may offer; every route still authorizes itself. */
+    can: {
+        viewMembers: boolean;
+        manageClasses: boolean;
+        updateSettings: boolean;
+    };
 }
 
 /** The current studio. Null off a tenant subdomain. */

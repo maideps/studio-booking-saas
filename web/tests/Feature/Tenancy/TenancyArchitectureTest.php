@@ -64,6 +64,37 @@ it('reports a tenant table without an indexed, constrained tenant_id', function 
         ]);
 });
 
+it('references other tenant-owned tables only through tenant_id', function (): void {
+    $tables = array_values(array_map(
+        fn (string $model): string => (new $model)->getTable(),
+        array_diff(TenancyArchitecture::appModels(), TenancyArchitecture::CENTRAL_MODELS),
+    ));
+
+    expect($tables)->toContain('class_sessions', 'invitations');
+
+    foreach ($tables as $table) {
+        expect(TenancyArchitecture::crossTenantForeignKeys($table, $tables))->toBe([]);
+    }
+});
+
+it('reports a reference to a tenant-owned table without tenant_id', function (): void {
+    Schema::create('arch_parents', function (Blueprint $table): void {
+        $table->id();
+        $table->foreignId('tenant_id')->constrained();
+        $table->unique(['tenant_id', 'id']);
+    });
+    Schema::create('arch_children', function (Blueprint $table): void {
+        $table->id();
+        $table->foreignId('tenant_id')->constrained();
+        $table->foreignId('loose_parent_id')->constrained('arch_parents');
+        $table->unsignedBigInteger('scoped_parent_id');
+        $table->foreign(['tenant_id', 'scoped_parent_id'])->references(['tenant_id', 'id'])->on('arch_parents');
+    });
+
+    expect(TenancyArchitecture::crossTenantForeignKeys('arch_children', ['arch_parents', 'arch_children']))
+        ->toBe(['arch_children.loose_parent_id references arch_parents without tenant_id']);
+});
+
 it('makes every queued job tenant-aware', function (): void {
     expect(TenancyArchitecture::queuedJobsWithoutTenant(TenancyArchitecture::appClasses(), TenancyArchitecture::CENTRAL_JOBS))
         ->toBe([]);

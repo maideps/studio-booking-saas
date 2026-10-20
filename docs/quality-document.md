@@ -11,15 +11,18 @@ Rate each module on a scale of A (excellent) / B (good) / C (acceptable) / D (ne
 | tools/ launchers and Docker stack | C | n/a | B | B | n/a |
 | web tenancy (`app/Tenancy`, `Tenant`, subdomain middleware) | A | A | A | A | B |
 | web auth and roles (`app/Auth`, `Policies`, `Enums/Role`, auth controllers and pages) | A | A | A | A | B |
+| web studios, staff and classes (settings, invitations, class templates and sessions) | A | A | A | A | B |
 
 ## Summary
 
-- **Overall Quality Grade:** B (tenancy, authentication and roles in place; no booking behavior yet)
+- **Overall Quality Grade:** B (tenancy, authentication, roles, staff and classes in place; no booking behavior yet)
 - **Blockers:** none
 - **Areas requiring attention:**
   - PHP tests run on SQLite. Move them to PostgreSQL before feat-005, whose locking tests need it. The tenancy tests use only portable SQL. The new migrations ran on PostgreSQL only through `npm run smoke` (the app migrates on start), not under test.
   - The scope-bypass rule is a token scan of our own code; Laravel internals that skip global scopes (validation `unique`/`exists`, queue model restoration) are not covered by it (see `docs/ARCHITECTURE.md`, Tenancy).
   - The auth Vue pages have component tests for the login and members pages only. The register and password pages are covered through the Pest tests of their routes, not as components. The full UI is feat-012.
+  - Studios and classes performance is graded B: the schedule loads every upcoming session with its template and instructor (eager-loaded) and has no pagination or date window yet. Not measured.
+  - The new Vue pages have component tests for the Join and Members pages only; the Settings, Classes and Schedule pages are covered through the Pest tests of their routes. The full UI is feat-012.
   - Auth performance is graded B: password hashing dominates login, and the members list loads every member of the studio without pagination. Not measured.
   - Tenancy performance is graded B: each scoped query adds one indexed `tenant_id` condition, and each tenant-aware job does one extra lookup of its tenant. Not measured.
   - The launchers and the Compose stack are tested only by running them (`npm run check`, `npm run smoke`); they have no unit tests of their own.
@@ -44,6 +47,13 @@ Rate each module on a scale of A (excellent) / B (good) / C (acceptable) / D (ne
   - per-tenant password reset tokens, links, throttling, expiry and the cross-tenant purge;
   - architecture rules for `unique`/`exists` validation rules and for auth routes outside the `tenant` middleware, each fed a violation.
   - Fourteen safeguards were each broken on purpose once (the `Gate::before` check, the token repository, the throttle key, the tenant-aware rule, the two halves of the test request reset, the tenant route group, three policy rules, the registration role, the token lookup, the reset link and the tenant check on the shared user prop). A test failed every time.
+- Session 005 (feat-004) added studios, staff and classes. Pest now has 262 tests and Vitest 10:
+  - a role matrix: every protected action (18 routes) for each role, plus a guest, a replayed session of another studio and `actingAs` an owner of another studio;
+  - studio settings that only ever change the current studio;
+  - invitations: the link host, hashed tokens, replacement, refusals, and acceptance with a new or an existing account;
+  - class templates and sessions: per-studio name uniqueness, 404 for another studio's records, validation of template, instructor and time, timezone conversion, and composite foreign keys that refuse a cross-studio reference in the database;
+  - a new architecture rule for foreign keys between tenant-owned tables, fed a violation.
+  - Twenty safeguards were each broken on purpose once by a script, and a test failed every time.
 
 ---
 
