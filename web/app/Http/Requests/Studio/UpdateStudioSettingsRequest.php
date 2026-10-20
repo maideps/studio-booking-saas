@@ -20,6 +20,7 @@ final class UpdateStudioSettingsRequest extends FormRequest
             'name' => ['required', 'string', 'max:255'],
             'timezone' => ['required', 'string', 'timezone:all'],
             'contact_email' => ['nullable', 'string', 'email', 'max:255'],
+            'cancellation_window_hours' => ['required', 'integer', 'min:0', 'max:168'],
         ];
     }
 }

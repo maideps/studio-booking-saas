@@ -21,6 +21,8 @@ final readonly class ProtectedActions
      * @param  list<Role>  $allowed
      * @param  bool  $authorized  whether a policy guards it, so a user of another tenant gets 403
      * @param  Closure(StudioFixture): array<string, mixed>  $payload
+     * @param  (Closure(StudioFixture): array<string, int>)|null  $setup  creates the records the action needs
+     *                                                                    and returns extra path placeholders
      */
     public function __construct(
         public string $method,
@@ -28,6 +30,7 @@ final readonly class ProtectedActions
         public array $allowed,
         public bool $authorized,
         public Closure $payload,
+        public ?Closure $setup = null,
     ) {}
 
     /**
@@ -65,6 +68,7 @@ final readonly class ProtectedActions
                 'name' => 'Renamed Studio',
                 'timezone' => 'Europe/Madrid',
                 'contact_email' => 'hello@example.com',
+                'cancellation_window_hours' => 6,
             ]),
             'classes list' => new self('GET', '/classes', $everyone, true, $none),
             'new class page' => new self('GET', '/classes/create', $managers, true, $none),
@@ -77,6 +81,16 @@ final readonly class ProtectedActions
             'edit session page' => new self('GET', '/schedule/{classSession}/edit', $managers, true, $none),
             'update a session' => new self('PUT', '/schedule/{classSession}', $managers, true, $classSession),
             'book a session' => new self('POST', '/schedule/{classSession}/bookings', [Role::Customer], true, $none),
+            'cancel a booking' => new self('DELETE', '/bookings/{booking}', [Role::Customer], true, $none,
+                fn (StudioFixture $studio): array => ['{booking}' => $studio->customerBooking()->id]),
+            'join a waitlist' => new self('POST', '/schedule/{classSession}/waitlist', [Role::Customer], true, $none,
+                function (StudioFixture $studio): array {
+                    $studio->fillSession();
+
+                    return [];
+                }),
+            'leave a waitlist' => new self('DELETE', '/waitlist/{waitlistEntry}', [Role::Customer], true, $none,
+                fn (StudioFixture $studio): array => ['{waitlistEntry}' => $studio->customerWaitlistEntry()->id]),
         ];
     }
 
@@ -106,6 +120,14 @@ final readonly class ProtectedActions
         }
 
         return $rows;
+    }
+
+    /**
+     * The action's URL on the studio, after creating the records it needs.
+     */
+    public function url(StudioFixture $studio): string
+    {
+        return $studio->url($this->path, $this->setup === null ? [] : ($this->setup)($studio));
     }
 
     public function allows(Role $role): bool

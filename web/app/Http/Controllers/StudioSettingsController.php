@@ -31,6 +31,7 @@ final class StudioSettingsController extends Controller
                 'name' => $tenant->name,
                 'timezone' => $tenant->timezone,
                 'contact_email' => $tenant->contact_email,
+                'cancellation_window_hours' => $tenant->cancellation_window_hours,
             ],
             'timezones' => DateTimeZone::listIdentifiers(),
             'status' => $request->session()->get('status'),

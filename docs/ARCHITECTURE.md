@@ -258,3 +258,32 @@ Customers book places in class sessions (feat-005, D-010). The code is `web/app/
   - `web/tests/Concurrency/ParallelBookingTest.php` proves them on PostgreSQL. It starts one PHP process per attempt (`web/tests/Support/Concurrency/attempt-booking.php`) and releases them all at once with a go file. Each attempt holds its transaction open for 300 ms after booking.
   - Eight customers racing for the last place get exactly one booking. Five identical requests from one customer get exactly one booking.
   - With the row lock removed, all eight customers got in. The test fails then.
+
+### Cancellation and waitlist
+
+Customers cancel bookings before a studio-defined deadline and wait in line for full sessions; a freed place goes to the first person waiting at once (feat-006, D-011). The code is in `web/app/Actions/Bookings/` (`CancelBooking`, `JoinWaitlist`, `LeaveWaitlist`, `FillFromWaitlist`), `web/app/Models/WaitlistEntry.php`, `WaitlistEntryPolicy` and `WaitlistController`.
+
+- **The rule.** A session never has a free place while someone is waiting.
+  - `FillFromWaitlist`, given a locked session, gives each free place to the first active entry in id order. It releases the entry (`active = NULL`) and books that customer.
+  - `CancelBooking` calls it after releasing a booking, and `ScheduleClassSession` calls it after a capacity change, inside the same transaction.
+- **The lock.** `ClassSession::lockedForChange()` (`SELECT … FOR UPDATE`) is the first step of every change to a session's places:
+  - `BookSession`, `CancelBooking`, `JoinWaitlist`, `LeaveWaitlist`;
+  - `ScheduleClassSession` for an existing session, which also refuses a capacity below the active bookings.
+- **Cancellation.**
+  - `DELETE /bookings/{booking}`, the booking's own customer only (`BookingPolicy::cancel`).
+  - The deadline is the start minus `tenants.cancellation_window_hours` (0 to 168, default 12, on the settings page; `Tenant::cancellationDeadline()`).
+  - After it, or for an already cancelled booking, the action refuses with a message.
+- **Waitlist.**
+  - `POST /schedule/{classSession}/waitlist` joins: customers only, and only for a full session that has not started, by someone who holds no place and is not already waiting.
+  - `DELETE /waitlist/{waitlistEntry}` leaves: the entry's own customer.
+  - `waitlist_entries` has composite foreign keys and a one-active-entry unique index, like `bookings`.
+- **Schedule page.** Shows the number waiting. For a customer, it also shows Cancel (with the deadline in studio time) or "Waiting, number N" with Leave, and offers Join waitlist on a full session.
+- **Tests.**
+  - `web/tests/Feature/Bookings/CancellationTest.php` and `WaitlistTest.php` cover:
+    - the window boundaries (inside, at the last moment, one second late, after the start, a 0-hour window);
+    - promotion order, skipping a customer who left, and promotion on a capacity increase;
+    - the join rules, isolation and the database constraints.
+  - `web/tests/Concurrency/ParallelWaitlistTest.php` races on PostgreSQL:
+    - a cancellation against four new bookings: the first waiting customer gets the place;
+    - two cancellations at once: the first two waiting customers are promoted in order;
+    - a cancellation against four waitlist joins: the rule holds whatever the order. With the session lock removed from `CancelBooking`, this test failed on both runs.

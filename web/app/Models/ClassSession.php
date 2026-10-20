@@ -25,6 +25,16 @@ class ClassSession extends Model
     use BelongsToTenant, HasFactory;
 
     /**
+     * The session, locked (SELECT … FOR UPDATE) until the surrounding
+     * transaction ends. Every change to a session's places takes this lock
+     * first, so those changes run one after another (D-010, D-011).
+     */
+    public static function lockedForChange(int $id): self
+    {
+        return self::query()->lockForUpdate()->findOrFail($id);
+    }
+
+    /**
      * @param  Builder<self>  $query
      */
     public function scopeUpcoming(Builder $query): void
@@ -54,6 +64,14 @@ class ClassSession extends Model
     public function activeBookingCount(): int
     {
         return $this->bookings()->active()->count();
+    }
+
+    /**
+     * @return HasMany<WaitlistEntry, $this>
+     */
+    public function waitlistEntries(): HasMany
+    {
+        return $this->hasMany(WaitlistEntry::class);
     }
 
     /**

@@ -128,6 +128,6 @@ it('sends a guest from a protected page to the tenant login', function (Protecte
     $tenants = twoTenants();
     $studio = StudioFixture::create($tenants->a);
 
-    call($action->method, $studio->url($action->path), ($action->payload)($studio))
+    call($action->method, $action->url($studio), ($action->payload)($studio))
         ->assertRedirect(tenantUrl($tenants->a, '/login'));
 })->with('protected actions');

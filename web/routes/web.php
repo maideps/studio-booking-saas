@@ -15,11 +15,13 @@ use App\Http\Controllers\JoinController;
 use App\Http\Controllers\MemberController;
 use App\Http\Controllers\MemberRoleController;
 use App\Http\Controllers\StudioSettingsController;
+use App\Http\Controllers\WaitlistController;
 use App\Models\Booking;
 use App\Models\ClassSession;
 use App\Models\ClassTemplate;
 use App\Models\Invitation;
 use App\Models\User;
+use App\Models\WaitlistEntry;
 use Illuminate\Support\Facades\Route;
 
 Route::inertia('/', 'Welcome')->name('home');
@@ -104,5 +106,15 @@ Route::middleware('tenant')->group(function (): void {
         Route::post('/schedule/{classSession}/bookings', [BookingController::class, 'store'])
             ->name('bookings.store')
             ->can('create', [Booking::class, 'classSession']);
+        Route::delete('/bookings/{booking}', [BookingController::class, 'destroy'])
+            ->name('bookings.destroy')
+            ->can('cancel', 'booking');
+
+        Route::post('/schedule/{classSession}/waitlist', [WaitlistController::class, 'store'])
+            ->name('waitlist.store')
+            ->can('create', [WaitlistEntry::class, 'classSession']);
+        Route::delete('/waitlist/{waitlistEntry}', [WaitlistController::class, 'destroy'])
+            ->name('waitlist.destroy')
+            ->can('delete', 'waitlistEntry');
     });
 });

@@ -19,7 +19,7 @@ it('lets each role do exactly what its policy allows', function (ProtectedAction
     $studio = StudioFixture::create(twoTenants()->a);
 
     $response = actingAs($studio->user($role))
-        ->call($action->method, $studio->url($action->path), ($action->payload)($studio));
+        ->call($action->method, $action->url($studio), ($action->payload)($studio));
 
     if ($action->allows($role)) {
         expect($response->status())->toBeLessThan(400);
@@ -38,7 +38,7 @@ it('refuses every authorized action to an owner of another studio', function (Pr
     $foreignOwner = member($tenants->a, Role::Owner);
 
     actingAs($foreignOwner)
-        ->call($action->method, $studioB->url($action->path), ($action->payload)($studioB))
+        ->call($action->method, $action->url($studioB), ($action->payload)($studioB))
         ->assertForbidden();
 })->with(fn (): array => array_filter(ProtectedActions::dataset(), fn (array $row): bool => $row[0]->authorized));
 

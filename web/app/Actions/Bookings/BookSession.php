@@ -29,7 +29,7 @@ final class BookSession
     {
         try {
             return DB::transaction(function () use ($session, $customer): Booking {
-                $locked = ClassSession::query()->lockForUpdate()->findOrFail($session->id);
+                $locked = ClassSession::lockedForChange($session->id);
 
                 if ($locked->starts_at->isPast()) {
                     throw BookingRefused::started();

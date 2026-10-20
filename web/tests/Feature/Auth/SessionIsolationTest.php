@@ -107,7 +107,7 @@ it('denies every protected action on tenant B to a tenant A session', function (
 
     startNewRequest();
     withCookies($cookies)
-        ->call($action->method, $studioB->url($action->path), ($action->payload)($studioB))
+        ->call($action->method, $action->url($studioB), ($action->payload)($studioB))
         ->assertRedirect(tenantUrl($tenants->b, '/login'));
 
     expect($tenants->b->run(fn () => User::query()->findOrFail($studioB->member->id)->role))->toBe(Role::Customer)

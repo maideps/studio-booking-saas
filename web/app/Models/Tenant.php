@@ -18,7 +18,7 @@ use InvalidArgumentException;
  * A studio using the platform. Tenants are central records: this model is
  * not tenant-scoped, and its slug is the tenant's subdomain.
  */
-#[Fillable(['name', 'slug', 'timezone', 'contact_email'])]
+#[Fillable(['name', 'slug', 'timezone', 'contact_email', 'cancellation_window_hours'])]
 class Tenant extends Model
 {
     /** @use HasFactory<TenantFactory> */
@@ -31,6 +31,7 @@ class Tenant extends Model
      */
     protected $attributes = [
         'timezone' => 'UTC',
+        'cancellation_window_hours' => 12,
     ];
 
     /** One DNS label: lowercase letters, digits and inner hyphens, at most 63 characters. */
@@ -75,6 +76,15 @@ class Tenant extends Model
     public function localTime(CarbonInterface $instant): CarbonImmutable
     {
         return CarbonImmutable::instance($instant)->setTimezone($this->timezone);
+    }
+
+    /**
+     * The last moment a customer may cancel a booking for a session that
+     * starts at the given instant (D-011).
+     */
+    public function cancellationDeadline(CarbonInterface $startsAt): CarbonImmutable
+    {
+        return CarbonImmutable::instance($startsAt)->subHours($this->cancellation_window_hours);
     }
 
     /**

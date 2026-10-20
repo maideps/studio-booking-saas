@@ -12,6 +12,7 @@ use App\Models\ClassSession;
 use App\Models\ClassTemplate;
 use App\Models\Tenant;
 use App\Models\User;
+use App\Models\WaitlistEntry;
 use App\Tenancy\TenantContext;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
@@ -33,25 +34,47 @@ final class ClassSessionController extends Controller
         assert($actor instanceof User);
         $tenant = $this->context->currentOrFail();
 
-        $bookedByActor = Booking::query()->active()->where('customer_id', $actor->id)->pluck('class_session_id')->all();
+        $myBookings = Booking::query()->active()->where('customer_id', $actor->id)->get()->keyBy('class_session_id');
+        $myEntries = WaitlistEntry::query()->waiting()->where('customer_id', $actor->id)->get()->keyBy('class_session_id');
 
         $sessions = ClassSession::query()
             ->upcoming()
             ->with(['classTemplate', 'instructor'])
-            ->withCount(['bookings as active_bookings_count' => fn (Builder $query) => $query->where('active', true)])
+            ->withCount([
+                'bookings as active_bookings_count' => fn (Builder $query) => $query->where('active', true),
+                'waitlistEntries as waiting_count' => fn (Builder $query) => $query->where('active', true),
+            ])
             ->get()
-            ->map(fn (ClassSession $session): array => [
-                'id' => $session->id,
-                'className' => $session->classTemplate?->name,
-                'instructorName' => $session->instructor?->name,
-                'startsAt' => $tenant->localTime($session->starts_at)->format(Tenant::LOCAL_TIME_FORMAT),
-                'endsAt' => $tenant->localTime($session->ends_at)->format(Tenant::LOCAL_TIME_FORMAT),
-                'capacity' => $session->capacity,
-                'placesLeft' => max(0, $session->capacity - (int) $session->getAttribute('active_bookings_count')),
-                'bookedByMe' => in_array($session->id, $bookedByActor, true),
-                'canBook' => $actor->can('create', [Booking::class, $session]),
-                'canUpdate' => $actor->can('update', $session),
-            ]);
+            ->map(function (ClassSession $session) use ($actor, $tenant, $myBookings, $myEntries): array {
+                $placesLeft = max(0, $session->capacity - (int) $session->getAttribute('active_bookings_count'));
+                $booking = $myBookings->get($session->id);
+                $entry = $myEntries->get($session->id);
+                $cancelDeadline = $tenant->cancellationDeadline($session->starts_at);
+
+                return [
+                    'id' => $session->id,
+                    'className' => $session->classTemplate?->name,
+                    'instructorName' => $session->instructor?->name,
+                    'startsAt' => $tenant->localTime($session->starts_at)->format(Tenant::LOCAL_TIME_FORMAT),
+                    'endsAt' => $tenant->localTime($session->ends_at)->format(Tenant::LOCAL_TIME_FORMAT),
+                    'capacity' => $session->capacity,
+                    'placesLeft' => $placesLeft,
+                    'waitingCount' => (int) $session->getAttribute('waiting_count'),
+                    'bookedByMe' => $booking !== null,
+                    'myBookingId' => $booking?->id,
+                    'cancelUntil' => $tenant->localTime($cancelDeadline)->format(Tenant::LOCAL_TIME_FORMAT),
+                    'canCancel' => $booking !== null && $actor->can('cancel', $booking) && ! now()->greaterThan($cancelDeadline),
+                    'myWaitlistEntryId' => $entry?->id,
+                    'waitlistPosition' => $entry === null ? null : WaitlistEntry::query()->waiting()
+                        ->where('class_session_id', $session->id)
+                        ->where('id', '<=', $entry->id)
+                        ->count(),
+                    'canBook' => $actor->can('create', [Booking::class, $session]),
+                    'canJoinWaitlist' => $booking === null && $entry === null && $placesLeft === 0
+                        && $actor->can('create', [WaitlistEntry::class, $session]),
+                    'canUpdate' => $actor->can('update', $session),
+                ];
+            });
 
         return Inertia::render('Schedule/Index', [
             'sessions' => $sessions,

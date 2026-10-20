@@ -188,3 +188,24 @@ Policies also need a rule for a user who is signed in but belongs to another ten
 **Consequences:**
 - Positive: parallel requests cannot overbook a session or double-book a customer, and a test on the real database shows it, including that the test fails without the lock.
 - Negative: `npm run test` needs Docker. A busy session's bookings queue on its row lock; that is fine at studio scale. `active` must never be set to `false`: two released bookings of the same customer and session would then collide in the index.
+
+### D-011: Cancellation frees the place under the session lock, and the waitlist fills it at once
+
+**Date:** 2026-10-20
+**Status:** accepted
+**Context:** feat-006 adds cancellation before a studio-defined deadline, a first-in-first-out waitlist, and automatic promotion when a place opens. A promotion and a new booking can race for the same freed place, and a customer can join the waitlist at the moment a place frees up. The product promises that the first person waiting gets the place.
+**Decision:**
+- **One rule.** A session never has a free place while someone is waiting. `FillFromWaitlist` enforces it: given a locked session, it hands each free place to the first active waitlist entry. Every path that frees or adds places calls it inside the same transaction:
+  - `CancelBooking` frees a place;
+  - `ScheduleClassSession`, when the capacity goes up, adds places.
+  A direct booking can therefore never jump the queue: when anyone is waiting, the session is full.
+- **One lock.** Every change to a session's places locks the session row first (`ClassSession::lockedForChange()`, D-010): booking, cancelling, joining and leaving the waitlist, and rescheduling. Changes to one session run one after another, in one lock order, so they cannot deadlock each other.
+- **The waitlist.** Entries are rows in `waitlist_entries`, ordered by id. Joining is refused while places are free ("book instead"). Leaving or being promoted sets `active` to `NULL`, never `false`, as for bookings (D-010).
+- **The window.** The cancellation window is a studio setting (`tenants.cancellation_window_hours`, default 12). The deadline is the session start minus the window, and `CancelBooking` checks it under the lock. Only the booking's own customer may cancel; staff cancellation is later.
+**Alternatives considered:**
+- Promotion by a queued job after a cancellation — Rejected: between the cancellation and the job, a new booking could take the place, and the queue would need its own ordering guarantees. Promoting inside the cancelling transaction leaves no window.
+- Locking waitlist rows (`SELECT … FOR UPDATE SKIP LOCKED`) instead of the session — Rejected: it does not stop a waitlist join from slipping past a cancellation. The race test that shows the free-place-while-waiting failure depends on the session lock.
+- Letting customers join the waitlist of a session with free places — Rejected: it creates a waiting customer next to a free place, which the rule forbids.
+**Consequences:**
+- Positive: promotion order is exact and race-free. Tests on PostgreSQL cover a cancellation racing new bookings, two cancellations at once, and a cancellation racing waitlist joins.
+- Negative: every new path that frees places, such as staff cancellation or deleting a session, must call `FillFromWaitlist` under the lock. The promoted customer is not told until feat-009 sends mail.

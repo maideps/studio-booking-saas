@@ -3,19 +3,24 @@
 declare(strict_types=1);
 
 /*
- * One booking attempt in its own PHP process, for tests/Concurrency.
+ * One booking change in its own PHP process, for tests/Concurrency.
  *
- *   php attempt-booking.php <tenant id> <session id> <customer id> <go file> <hold ms>
+ *   php attempt-booking.php book   <tenant id> <session id> <customer id> <go file> <hold ms>
+ *   php attempt-booking.php cancel <tenant id> <booking id> <customer id> <go file> <hold ms>
+ *   php attempt-booking.php join   <tenant id> <session id> <customer id> <go file> <hold ms>
  *
  * Boots the app, prints "ready", waits until the go file exists (so every
- * process attempts at the same moment), books through BookSession and keeps
- * the transaction open for <hold ms> afterwards. That widens the race window:
- * without the row lock, the other attempts would read the old count during
- * the hold and overbook. Prints "booked" or "refused: <reason>".
+ * process acts at the same moment), books or cancels through the real action
+ * and keeps the transaction open for <hold ms> afterwards. That widens the race
+ * window: without the session lock, the other attempts would read stale state
+ * during the hold. Prints "booked", "cancelled", "waiting" or "refused: <reason>".
  */
 
 use App\Actions\Bookings\BookSession;
+use App\Actions\Bookings\CancelBooking;
+use App\Actions\Bookings\JoinWaitlist;
 use App\Exceptions\BookingRefused;
+use App\Models\Booking;
 use App\Models\ClassSession;
 use App\Models\Tenant;
 use App\Models\User;
@@ -28,17 +33,35 @@ $app = require __DIR__.'/../../../bootstrap/app.php';
 $app->make(Kernel::class)->bootstrap();
 
 /** @var list<string> $argv */
-$tenantId = (int) ($argv[1] ?? 0);
-$sessionId = (int) ($argv[2] ?? 0);
-$customerId = (int) ($argv[3] ?? 0);
-$goFile = (string) ($argv[4] ?? '');
-$holdMicroseconds = (int) ($argv[5] ?? 0) * 1000;
+$action = (string) ($argv[1] ?? '');
+$tenantId = (int) ($argv[2] ?? 0);
+$recordId = (int) ($argv[3] ?? 0);
+$customerId = (int) ($argv[4] ?? 0);
+$goFile = (string) ($argv[5] ?? '');
+$holdMicroseconds = (int) ($argv[6] ?? 0) * 1000;
 
 $tenant = Tenant::query()->findOrFail($tenantId);
 
-echo $tenant->run(function () use ($sessionId, $customerId, $goFile, $holdMicroseconds): string {
-    $session = ClassSession::query()->findOrFail($sessionId);
+echo $tenant->run(function () use ($action, $recordId, $customerId, $goFile, $holdMicroseconds): string {
     $customer = User::query()->findOrFail($customerId);
+    $change = match ($action) {
+        'book' => function () use ($recordId, $customer): string {
+            app(BookSession::class)->handle(ClassSession::query()->findOrFail($recordId), $customer);
+
+            return 'booked';
+        },
+        'cancel' => function () use ($recordId): string {
+            app(CancelBooking::class)->handle(Booking::query()->findOrFail($recordId));
+
+            return 'cancelled';
+        },
+        'join' => function () use ($recordId, $customer): string {
+            app(JoinWaitlist::class)->handle(ClassSession::query()->findOrFail($recordId), $customer);
+
+            return 'waiting';
+        },
+        default => throw new InvalidArgumentException("Unknown action {$action}."),
+    };
 
     echo "ready\n";
     fflush(STDOUT);
@@ -47,15 +70,15 @@ echo $tenant->run(function () use ($sessionId, $customerId, $goFile, $holdMicros
         usleep(1_000);
     }
 
-    return DB::transaction(function () use ($session, $customer, $holdMicroseconds): string {
+    return DB::transaction(function () use ($change, $holdMicroseconds): string {
         try {
-            app(BookSession::class)->handle($session, $customer);
+            $result = $change();
         } catch (BookingRefused $refused) {
             return 'refused: '.$refused->getMessage();
         }
 
         usleep($holdMicroseconds);
 
-        return 'booked';
+        return $result;
     });
 }), "\n";

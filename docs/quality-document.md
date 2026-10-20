@@ -13,15 +13,17 @@ Rate each module on a scale of A (excellent) / B (good) / C (acceptable) / D (ne
 | web auth and roles (`app/Auth`, `Policies`, `Enums/Role`, auth controllers and pages) | A | A | A | A | B |
 | web studios, staff and classes (settings, invitations, class templates and sessions) | A | A | A | A | B |
 | web bookings (`BookSession`, `Booking`, PostgreSQL concurrency tests) | A | A | A | A | B |
+| web cancellation and waitlist (`CancelBooking`, `FillFromWaitlist`, `WaitlistEntry`) | A | A | A | A | B |
 
 ## Summary
 
-- **Overall Quality Grade:** B (tenancy, auth, roles, staff, classes and race-safe bookings in place; no cancellation, payments or notifications yet)
+- **Overall Quality Grade:** B (tenancy, auth, roles, staff, classes, race-safe bookings, cancellation and waitlist in place; no payments or notifications yet)
 - **Blockers:** none
 - **Areas requiring attention:**
-  - Most PHP tests run on SQLite; only the `postgres` group (3 tests) runs on PostgreSQL. Every migration runs on PostgreSQL in that group (each test migrates a fresh database) and in `npm run smoke`, but the rest of the behaviour is tested on SQLite only.
+  - Most PHP tests run on SQLite; only the `postgres` group (6 tests) runs on PostgreSQL. Every migration runs on PostgreSQL in that group (each test migrates a fresh database) and in `npm run smoke`, but the rest of the behaviour is tested on SQLite only.
   - The scope-bypass rule is a token scan of our own code; Laravel internals that skip global scopes (validation `unique`/`exists`, queue model restoration) are not covered by it (see `docs/ARCHITECTURE.md`, Tenancy).
   - The auth Vue pages have component tests for the login and members pages only. The register and password pages are covered through the Pest tests of their routes, not as components. The full UI is feat-012.
+  - Cancellation and waitlist performance is graded B: the schedule computes each waiting customer's position with one count query per waiting session, and promotion runs one query per promoted customer. Fine at studio scale; not measured.
   - Bookings performance is graded B: bookings for one session queue on its row lock, and the schedule counts active bookings per session with one grouped subquery. Not measured under load.
   - Studios and classes performance is graded B: the schedule loads every upcoming session with its template and instructor (eager-loaded) and has no pagination or date window yet. Not measured.
   - The new Vue pages have component tests for the Join and Members pages only; the Settings, Classes and Schedule pages are covered through the Pest tests of their routes. The full UI is feat-012.
@@ -61,6 +63,11 @@ Rate each module on a scale of A (excellent) / B (good) / C (acceptable) / D (ne
   - the booking rules on SQLite: full, started and already booked are refused; released bookings neither count nor block; another studio's session is a 404; capacity cannot drop below bookings; database-level refusals;
   - the booking route in the role matrix.
   - Eleven safeguards were each broken on purpose once (the row lock on PostgreSQL, ten on SQLite), and a test failed every time.
+- Session 007 (feat-006) added cancellation and the waitlist. Pest now has 320 tests on SQLite plus 6 on PostgreSQL, and Vitest 15:
+  - cancellation window boundaries, promotion order, leaving the waitlist, promotion on a capacity increase, the join rules, isolation and database constraints;
+  - three PostgreSQL races: a cancellation against new bookings, two cancellations at once, and a cancellation against waitlist joins. The last one failed on both runs when the session lock was removed from `CancelBooking`;
+  - cancel, join and leave in the role matrix.
+  - Thirteen safeguards were each broken on purpose once (the cancel lock on PostgreSQL, twelve on SQLite), and a test failed every time.
 
 ---
 

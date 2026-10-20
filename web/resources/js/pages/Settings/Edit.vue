@@ -6,7 +6,7 @@ import StatusMessage from '@/components/StatusMessage.vue';
 import AppLayout from '@/layouts/AppLayout.vue';
 
 const props = defineProps<{
-    settings: { name: string; timezone: string; contact_email: string | null };
+    settings: { name: string; timezone: string; contact_email: string | null; cancellation_window_hours: number };
     timezones: string[];
     status?: string | null;
 }>();
@@ -15,6 +15,7 @@ const form = useForm({
     name: props.settings.name,
     timezone: props.settings.timezone,
     contact_email: props.settings.contact_email ?? '',
+    cancellation_window_hours: props.settings.cancellation_window_hours,
 });
 
 function submit(): void {
@@ -68,6 +69,19 @@ function submit(): void {
                 >
             </label>
             <FieldError :message="form.errors.contact_email" />
+            <label class="flex flex-col gap-1 text-sm">
+                Customers can cancel up to (hours before class)
+                <input
+                    v-model.number="form.cancellation_window_hours"
+                    type="number"
+                    name="cancellation_window_hours"
+                    min="0"
+                    max="168"
+                    required
+                    class="rounded border border-stone-300 px-3 py-2"
+                >
+            </label>
+            <FieldError :message="form.errors.cancellation_window_hours" />
             <button
                 type="submit"
                 :disabled="form.processing"
