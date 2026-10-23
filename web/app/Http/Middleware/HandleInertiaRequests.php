@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Middleware;
 
+use App\Models\Checkout;
 use App\Models\ClassTemplate;
 use App\Models\User;
 use App\Tenancy\TenantContext;
@@ -49,6 +50,7 @@ class HandleInertiaRequests extends Middleware
                         'viewMembers' => $user->can('viewAny', User::class),
                         'manageClasses' => $user->can('create', ClassTemplate::class),
                         'updateSettings' => $user->can('update', $tenant),
+                        'buy' => $user->can('create', Checkout::class),
                     ],
                 ] : null,
             ],

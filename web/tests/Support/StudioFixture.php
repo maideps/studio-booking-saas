@@ -4,8 +4,11 @@ declare(strict_types=1);
 
 namespace Tests\Support;
 
+use App\Billing\CheckoutKind;
+use App\Billing\FakePaymentGateway;
 use App\Enums\Role;
 use App\Models\Booking;
+use App\Models\Checkout;
 use App\Models\ClassSession;
 use App\Models\ClassTemplate;
 use App\Models\Invitation;
@@ -98,9 +101,34 @@ final readonly class StudioFixture
     }
 
     /**
+     * Makes the studio sell a monthly membership (49.00) and a 10-class pack (90.00).
+     */
+    public function sellPasses(): void
+    {
+        $this->tenant->update([
+            'membership_price_cents' => 4900,
+            'class_pack_size' => 10,
+            'class_pack_price_cents' => 9000,
+        ]);
+    }
+
+    /**
+     * A class-pack checkout of the customer, already paid at the gateway.
+     */
+    public function customerPaidCheckout(): Checkout
+    {
+        $this->sellPasses();
+
+        return $this->tenant->run(fn () => Checkout::factory()->create([
+            'customer_id' => $this->customer->id,
+            'gateway_session_id' => FakePaymentGateway::paidSessionId(CheckoutKind::ClassPack),
+        ]));
+    }
+
+    /**
      * The path with its placeholders replaced by this studio's records.
      *
-     * @param  array<string, int>  $extra  more placeholders, such as ['{booking}' => 7]
+     * @param  array<string, int|string>  $extra  more placeholders, such as ['{booking}' => 7]
      */
     public function path(string $path, array $extra = []): string
     {
@@ -109,12 +137,12 @@ final readonly class StudioFixture
             '{invitation}' => (string) $this->invitation->id,
             '{classTemplate}' => (string) $this->classTemplate->id,
             '{classSession}' => (string) $this->classSession->id,
-            ...array_map(fn (int $id): string => (string) $id, $extra),
+            ...array_map(fn (int|string $value): string => (string) $value, $extra),
         ]);
     }
 
     /**
-     * @param  array<string, int>  $extra
+     * @param  array<string, int|string>  $extra
      */
     public function url(string $path, array $extra = []): string
     {

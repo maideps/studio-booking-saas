@@ -45,6 +45,13 @@ function logout(): void {
                     Members
                 </Link>
                 <Link
+                    v-if="user?.can.buy"
+                    href="/billing"
+                    class="text-sm text-stone-600 hover:text-stone-900"
+                >
+                    Billing
+                </Link>
+                <Link
                     v-if="user?.can.updateSettings"
                     href="/settings"
                     class="text-sm text-stone-600 hover:text-stone-900"

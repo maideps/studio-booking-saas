@@ -1,0 +1,27 @@
+{
+  "id": "cs_test_m1E2m3B4e5R6",
+  "object": "checkout.session",
+  "mode": "subscription",
+  "status": "complete",
+  "payment_status": "paid",
+  "url": null,
+  "subscription": {
+    "id": "sub_1QxYz0ABCDEF",
+    "object": "subscription",
+    "status": "active",
+    "metadata": {"tenant_id": "1", "checkout_id": "2"},
+    "items": {
+      "object": "list",
+      "data": [
+        {
+          "id": "si_RabcDEF123",
+          "object": "subscription_item",
+          "current_period_start": 1793491200,
+          "current_period_end": 1796083200
+        }
+      ],
+      "has_more": false,
+      "url": "/v1/subscription_items?subscription=sub_1QxYz0ABCDEF"
+    }
+  }
+}

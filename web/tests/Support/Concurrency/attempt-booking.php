@@ -8,19 +8,23 @@ declare(strict_types=1);
  *   php attempt-booking.php book   <tenant id> <session id> <customer id> <go file> <hold ms>
  *   php attempt-booking.php cancel <tenant id> <booking id> <customer id> <go file> <hold ms>
  *   php attempt-booking.php join   <tenant id> <session id> <customer id> <go file> <hold ms>
+ *   php attempt-booking.php fulfil <tenant id> <checkout id> <customer id> <go file> <hold ms>
  *
  * Boots the app, prints "ready", waits until the go file exists (so every
  * process acts at the same moment), books or cancels through the real action
  * and keeps the transaction open for <hold ms> afterwards. That widens the race
  * window: without the session lock, the other attempts would read stale state
- * during the hold. Prints "booked", "cancelled", "waiting" or "refused: <reason>".
+ * during the hold. Prints "booked", "cancelled", "waiting", "fulfilled",
+ * "already fulfilled" or "refused: <reason>".
  */
 
+use App\Actions\Billing\FulfilCheckout;
 use App\Actions\Bookings\BookSession;
 use App\Actions\Bookings\CancelBooking;
 use App\Actions\Bookings\JoinWaitlist;
 use App\Exceptions\BookingRefused;
 use App\Models\Booking;
+use App\Models\Checkout;
 use App\Models\ClassSession;
 use App\Models\Tenant;
 use App\Models\User;
@@ -60,6 +64,9 @@ echo $tenant->run(function () use ($action, $recordId, $customerId, $goFile, $ho
 
             return 'waiting';
         },
+        'fulfil' => fn (): string => app(FulfilCheckout::class)->handle(Checkout::query()->findOrFail($recordId))
+            ? 'fulfilled'
+            : 'already fulfilled',
         default => throw new InvalidArgumentException("Unknown action {$action}."),
     };
 

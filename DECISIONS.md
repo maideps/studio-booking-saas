@@ -25,7 +25,7 @@ This file records significant architectural decisions, their context, alternativ
 ### D-001: Scope and stack for the portfolio project
 
 **Date:** 2026-10-17
-**Status:** accepted
+**Status:** accepted (the Cashier part is superseded by D-012)
 **Context:** The goal is a solid full-stack portfolio piece built with AI coding agents under a controlled process, in the author's strongest stack (Laravel, Vue), different from the first project (Python and React). No employer code or data may be used.
 **Decision:** A multi-tenant booking and membership SaaS for small studios: Laravel (PHP 8.3+), Vue 3 + TypeScript via Inertia, PostgreSQL, Redis, Stripe in test mode (Cashier), Pest, Larastan, Pint, Playwright, Docker Compose. Synthetic data only.
 **Alternatives considered:**
@@ -209,3 +209,31 @@ Policies also need a rule for a user who is signed in but belongs to another ten
 **Consequences:**
 - Positive: promotion order is exact and race-free. Tests on PostgreSQL cover a cancellation racing new bookings, two cancellations at once, and a cancellation racing waitlist joins.
 - Negative: every new path that frees places, such as staff cancellation or deleting a session, must call `FillFromWaitlist` under the lock. The promoted customer is not told until feat-009 sends mail.
+
+### D-012: Billing uses tenant-owned tables and stripe-php behind a domain gateway, not Cashier
+
+**Date:** 2026-10-20
+**Status:** accepted (replaces the Cashier part of D-001; chosen by the author)
+**Context:** feat-007 sells each studio's monthly membership and class pack through Stripe Checkout in test mode, and decides who may book. D-001 planned Laravel Cashier, but Cashier does not fit the tenancy built in feat-002 to feat-006:
+- its `subscriptions` tables are not tenant-owned, so they would get no tenant scope, write guards or composite keys (D-007, D-009);
+- its webhook controller looks users up by `stripe_id` with no tenant, which the fail-closed scope refuses;
+- its `Billable` trait assumes one Stripe customer per email, while here one email is a separate account in each studio.
+**Decision:**
+- **The gateway.** `App\Billing\PaymentGateway` is the domain's interface: start a hosted checkout, and read a checkout's result.
+  - `StripeGateway` implements it with `stripe/stripe-php` and Checkout Sessions with inline prices. A membership is a monthly subscription and a pack a one-off payment. Tenant and checkout ids travel as metadata.
+  - `FakePaymentGateway` implements it with no network, for tests and for the local demo (auto-paid there). It is refused outside `local` and `testing`, and `phpunit.xml` forces it even when `STRIPE_SECRET` is set.
+- **The data.** All tenant-owned, with composite keys:
+  - pricing is on `tenants` (one membership, one pack, both optional);
+  - `checkouts`;
+  - `memberships`, one row per customer;
+  - `credit_entries`, an append-only ledger whose balance is the sum. Its checkout reference is unique, so a purchase is credited once;
+  - `bookings.paid_with`.
+- **Fulfilment.** `FulfilCheckout` asks the gateway about the session stored on our checkout row, then locks the row and does nothing for a completed checkout. It is safe to run any number of times, and feat-008 webhooks will reuse it.
+- **Entitlement** is checked inside `BookSession`, `JoinWaitlist` and `FillFromWaitlist`. A studio that sells nothing is free; otherwise an active membership, then one credit, then a refusal. Spending a credit locks the customer row after the session row (one lock order), and `CancelBooking` refunds a credit.
+**Alternatives considered:**
+- Cashier with a tenant-owned `Subscription` model and a replacement webhook controller — Rejected: it means working around most of what Cashier provides, and its `users` columns and lookups would still assume global uniqueness.
+- Stripe Connect, with one Stripe account per studio — Rejected for now: real onboarding is out of scope for a portfolio project. Metadata carries the tenant, so moving to Connect later is a gateway change.
+- Pre-created Stripe Products and Prices per studio — Rejected: inline `price_data` keeps the studio's price in our database as the single source of truth.
+**Consequences:**
+- Positive: billing data gets the same isolation guarantees as everything else. Tests never touch the network, and the Stripe gateway is still exercised through stripe-php against recorded responses. Credit spending and fulfilment are proven race-free on PostgreSQL.
+- Negative: the app owns what Cashier would have provided: webhook handling, renewals and invoices (feat-008). Until feat-008, a membership lasts until the period end recorded at checkout. The recorded Stripe fixtures are hand-written and must be refreshed when upgrading stripe/stripe-php.

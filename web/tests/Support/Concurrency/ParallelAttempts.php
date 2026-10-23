@@ -31,7 +31,7 @@ final class ParallelAttempts
      * Starts one process per attempt, waits until every process has booted,
      * releases them all at once, and returns what each printed, sorted.
      *
-     * @param  list<array{0: 'book'|'cancel'|'join', 1: int, 2: int}>  $attempts  [action, session or booking id, customer id]
+     * @param  list<array{0: 'book'|'cancel'|'join'|'fulfil', 1: int, 2: int}>  $attempts  [action, session, booking or checkout id, customer id]
      * @param  int  $holdMs  how long each attempt keeps its transaction open after acting
      * @return list<string>
      */

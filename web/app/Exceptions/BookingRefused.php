@@ -42,6 +42,11 @@ final class BookingRefused extends RuntimeException
         return new self(__('This class still has places. Book it instead.'));
     }
 
+    public static function notEntitled(): self
+    {
+        return new self(__('Buy a membership or a class pack to book.'));
+    }
+
     public static function alreadyWaiting(): self
     {
         return new self(__('You are already on the waitlist for this class.'));

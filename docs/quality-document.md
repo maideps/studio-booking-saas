@@ -14,13 +14,15 @@ Rate each module on a scale of A (excellent) / B (good) / C (acceptable) / D (ne
 | web studios, staff and classes (settings, invitations, class templates and sessions) | A | A | A | A | B |
 | web bookings (`BookSession`, `Booking`, PostgreSQL concurrency tests) | A | A | A | A | B |
 | web cancellation and waitlist (`CancelBooking`, `FillFromWaitlist`, `WaitlistEntry`) | A | A | A | A | B |
+| web billing (`app/Billing`, checkouts, memberships, credit ledger) | A | A | A | A | B |
 
 ## Summary
 
-- **Overall Quality Grade:** B (tenancy, auth, roles, staff, classes, race-safe bookings, cancellation and waitlist in place; no payments or notifications yet)
+- **Overall Quality Grade:** B (tenancy, auth, roles, staff, classes, race-safe bookings, waitlist and paid entitlements in place; no webhooks or notifications yet)
 - **Blockers:** none
 - **Areas requiring attention:**
-  - Most PHP tests run on SQLite; only the `postgres` group (6 tests) runs on PostgreSQL. Every migration runs on PostgreSQL in that group (each test migrates a fresh database) and in `npm run smoke`, but the rest of the behaviour is tested on SQLite only.
+  - Most PHP tests run on SQLite; only the `postgres` group (8 tests) runs on PostgreSQL.
+  - Billing: the Stripe gateway is tested only against hand-written fixtures, never against Stripe itself. A real test-mode checkout has not been run in this project yet. Renewals and failed payments arrive with feat-008. Every migration runs on PostgreSQL in that group (each test migrates a fresh database) and in `npm run smoke`, but the rest of the behaviour is tested on SQLite only.
   - The scope-bypass rule is a token scan of our own code; Laravel internals that skip global scopes (validation `unique`/`exists`, queue model restoration) are not covered by it (see `docs/ARCHITECTURE.md`, Tenancy).
   - The auth Vue pages have component tests for the login and members pages only. The register and password pages are covered through the Pest tests of their routes, not as components. The full UI is feat-012.
   - Cancellation and waitlist performance is graded B: the schedule computes each waiting customer's position with one count query per waiting session, and promotion runs one query per promoted customer. Fine at studio scale; not measured.
@@ -68,6 +70,12 @@ Rate each module on a scale of A (excellent) / B (good) / C (acceptable) / D (ne
   - three PostgreSQL races: a cancellation against new bookings, two cancellations at once, and a cancellation against waitlist joins. The last one failed on both runs when the session lock was removed from `CancelBooking`;
   - cancel, join and leave in the role matrix.
   - Thirteen safeguards were each broken on purpose once (the cancel lock on PostgreSQL, twelve on SQLite), and a test failed every time.
+- Session 008 (feat-007) added memberships, class packs and Stripe Checkout behind a domain gateway. Pest now has 370 tests on SQLite plus 8 on PostgreSQL, and Vitest 18:
+  - checkout at the studio price, fulfilment once (also across four parallel processes), membership activation, and pricing settings;
+  - entitlement: free studios, memberships (active, cancelled, lapsed), credit spending and refunds, waitlist and promotion rules, and a single credit never spent twice by parallel bookings;
+  - the Stripe gateway against recorded responses through a fake stripe-php HTTP client, and the fake gateway forced in tests;
+  - the billing routes in the role matrix.
+  - Sixteen safeguards were each broken on purpose once (two on PostgreSQL, fourteen on SQLite), and a test failed every time.
 
 ---
 

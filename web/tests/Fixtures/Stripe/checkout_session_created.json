@@ -1,0 +1,13 @@
+{
+  "id": "cs_test_a1B2c3D4e5F6g7H8",
+  "object": "checkout.session",
+  "mode": "payment",
+  "status": "open",
+  "payment_status": "unpaid",
+  "url": "https://checkout.stripe.com/c/pay/cs_test_a1B2c3D4e5F6g7H8",
+  "currency": "eur",
+  "amount_total": 9000,
+  "customer_email": "casey@example.com",
+  "metadata": {"tenant_id": "1", "checkout_id": "1"},
+  "subscription": null
+}

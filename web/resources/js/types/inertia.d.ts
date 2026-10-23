@@ -13,6 +13,8 @@ export interface AuthUser {
         viewMembers: boolean;
         manageClasses: boolean;
         updateSettings: boolean;
+        /** Customers buy memberships and class packs. */
+        buy: boolean;
     };
 }
 

@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Actions\Bookings;
 
+use App\Billing\Entitlements;
+use App\Exceptions\BookingRefused;
 use App\Models\Booking;
 use App\Models\ClassSession;
 use App\Models\WaitlistEntry;
@@ -15,8 +17,10 @@ use App\Models\WaitlistEntry;
  * or adds places. It keeps the rule that a session never has a free place
  * while someone is waiting.
  */
-final class FillFromWaitlist
+final readonly class FillFromWaitlist
 {
+    public function __construct(private Entitlements $entitlements) {}
+
     /**
      * @return int how many customers were promoted
      */
@@ -44,10 +48,23 @@ final class FillFromWaitlist
                 continue;
             }
 
+            // The promoted customer pays like any booking. Someone no longer
+            // entitled loses their place in line, and the next one is tried.
+            $customer = $this->entitlements->lockCustomer($entry->customer_id);
+
+            try {
+                $payment = $this->entitlements->paymentFor($customer);
+            } catch (BookingRefused) {
+                continue;
+            }
+
             $booking = new Booking;
             $booking->class_session_id = $locked->id;
             $booking->customer_id = $entry->customer_id;
+            $booking->paid_with = $payment;
             $booking->save();
+
+            $this->entitlements->charge($booking);
 
             $free--;
             $promoted++;

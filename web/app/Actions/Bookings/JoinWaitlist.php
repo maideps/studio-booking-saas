@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Actions\Bookings;
 
+use App\Billing\Entitlements;
 use App\Exceptions\BookingRefused;
 use App\Models\Booking;
 use App\Models\ClassSession;
@@ -16,8 +17,10 @@ use Illuminate\Support\Facades\DB;
  * Puts a customer at the end of a full session's waitlist (D-011). Only a
  * full session has a waitlist: with free places the customer books instead.
  */
-final class JoinWaitlist
+final readonly class JoinWaitlist
 {
+    public function __construct(private Entitlements $entitlements) {}
+
     /**
      * @throws BookingRefused
      */
@@ -52,6 +55,9 @@ final class JoinWaitlist
                 if ($locked->activeBookingCount() < $locked->capacity) {
                     throw BookingRefused::placesAvailable();
                 }
+
+                // Only someone who could book may wait; nothing is spent until promotion.
+                $this->entitlements->paymentFor($customer);
 
                 $entry = new WaitlistEntry;
                 $entry->classSession()->associate($locked);

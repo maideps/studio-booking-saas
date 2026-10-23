@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Actions\Bookings;
 
+use App\Billing\Entitlements;
 use App\Exceptions\BookingRefused;
 use App\Models\Booking;
 use App\Models\ClassSession;
@@ -14,13 +15,15 @@ use Illuminate\Support\Facades\DB;
  * A customer cancels their booking (D-011). Allowed until the studio's
  * cancellation window before the start. The freed place goes to the first
  * customer on the waitlist in the same transaction, under the session lock,
- * so a new booking can never take it first.
+ * so a new booking can never take it first. A booking paid with a class-pack
+ * credit gets the credit back (D-012).
  */
 final readonly class CancelBooking
 {
     public function __construct(
         private TenantContext $context,
         private FillFromWaitlist $fill,
+        private Entitlements $entitlements,
     ) {}
 
     /**
@@ -43,6 +46,7 @@ final readonly class CancelBooking
             $booking->active = null;
             $booking->save();
 
+            $this->entitlements->refund($booking);
             $this->fill->handle($session);
 
             return $booking;

@@ -6,6 +6,7 @@ use App\Http\Controllers\Auth\ForgotPasswordController;
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\RegisterController;
 use App\Http\Controllers\Auth\ResetPasswordController;
+use App\Http\Controllers\BillingController;
 use App\Http\Controllers\BookingController;
 use App\Http\Controllers\ClassSessionController;
 use App\Http\Controllers\ClassTemplateController;
@@ -17,6 +18,7 @@ use App\Http\Controllers\MemberRoleController;
 use App\Http\Controllers\StudioSettingsController;
 use App\Http\Controllers\WaitlistController;
 use App\Models\Booking;
+use App\Models\Checkout;
 use App\Models\ClassSession;
 use App\Models\ClassTemplate;
 use App\Models\Invitation;
@@ -116,5 +118,16 @@ Route::middleware('tenant')->group(function (): void {
         Route::delete('/waitlist/{waitlistEntry}', [WaitlistController::class, 'destroy'])
             ->name('waitlist.destroy')
             ->can('delete', 'waitlistEntry');
+
+        Route::get('/billing', [BillingController::class, 'show'])
+            ->name('billing.show')
+            ->can('create', Checkout::class);
+        Route::post('/billing/checkout/{kind}', [BillingController::class, 'checkout'])
+            ->name('billing.checkout')
+            ->whereIn('kind', ['membership', 'class_pack'])
+            ->can('create', Checkout::class);
+        Route::get('/billing/checkouts/{checkout}/return', [BillingController::class, 'complete'])
+            ->name('billing.complete')
+            ->can('complete', 'checkout');
     });
 });

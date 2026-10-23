@@ -32,17 +32,30 @@ final class StudioSettingsController extends Controller
                 'timezone' => $tenant->timezone,
                 'contact_email' => $tenant->contact_email,
                 'cancellation_window_hours' => $tenant->cancellation_window_hours,
+                'currency' => $tenant->currency,
+                'membership_price' => self::price($tenant->membership_price_cents),
+                'class_pack_size' => $tenant->class_pack_size,
+                'class_pack_price' => self::price($tenant->class_pack_price_cents),
             ],
             'timezones' => DateTimeZone::listIdentifiers(),
+            'currencies' => UpdateStudioSettingsRequest::CURRENCIES,
             'status' => $request->session()->get('status'),
         ]);
     }
 
     public function update(UpdateStudioSettingsRequest $request): RedirectResponse
     {
-        $this->authorizedTenant()->update($request->validated());
+        $this->authorizedTenant()->update($request->tenantAttributes());
 
         return redirect()->route('settings.edit')->with('status', __('Settings saved.'));
+    }
+
+    /**
+     * Cents as a price in currency units for the form ("49.00").
+     */
+    private static function price(?int $cents): ?string
+    {
+        return $cents === null ? null : number_format($cents / 100, 2, '.', '');
     }
 
     private function authorizedTenant(): Tenant

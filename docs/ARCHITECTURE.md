@@ -104,7 +104,7 @@ Key design rules:
 
 - **Tenancy:** one database, a `tenant_id` column on every tenant-owned table (including users), a global scope applied by a `BelongsToTenant` trait, tenant resolved from the request (subdomain) and carried explicitly into queued jobs (D-002, D-007; see Tenancy below).
 - **Capacity:** booking inside a transaction with a row lock on the session; a concurrency test fires parallel requests and asserts no overbooking.
-- **Billing:** webhook handlers verify the Stripe signature, record each event id, and are safe to replay.
+- **Billing:** Stripe sits behind a domain-owned `PaymentGateway` (D-004, D-012). Fulfilment is idempotent. Webhook handlers (feat-008) verify the Stripe signature, record each event id, and are safe to replay.
 - **Audit:** state changes append rows to an audit table that is never updated or deleted.
 
 ### Tenancy
@@ -287,3 +287,29 @@ Customers cancel bookings before a studio-defined deadline and wait in line for 
     - a cancellation against four new bookings: the first waiting customer gets the place;
     - two cancellations at once: the first two waiting customers are promoted in order;
     - a cancellation against four waitlist joins: the rule holds whatever the order. With the session lock removed from `CancelBooking`, this test failed on both runs.
+
+### Billing
+
+Each studio sells a monthly membership and a class pack, bought through Stripe Checkout in test mode. An entitlement rule decides who may book (feat-007, D-012). The code is in `web/app/Billing/`, `web/app/Actions/Billing/`, the models `Checkout`, `Membership` and `CreditEntry`, `CheckoutPolicy` and `BillingController`.
+
+- **Pricing.** Set on the settings page and stored on `tenants`: `currency`, `membership_price_cents`, `class_pack_size` and `class_pack_price_cents`. An empty price means not sold, and a studio that sells nothing is free to book (`Tenant::isFreeToBook()`).
+- **Gateway.** `PaymentGateway` has two operations: `startCheckout()`, which returns the hosted page URL, and `checkoutResult()`, which reports whether it was paid and, for a membership, the subscription and period end.
+  - `StripeGateway` (stripe-php, Checkout Sessions, inline `price_data`; `subscription` mode for the membership, `payment` mode for a pack) is used when `STRIPE_SECRET` is set.
+  - Otherwise `FakePaymentGateway` is used, and only in `local` and `testing`. Locally it auto-pays, so the demo works without Stripe.
+  - `phpunit.xml` forces the fake.
+- **Flow.**
+  - `POST /billing/checkout/{membership|class_pack}` (customers) creates a pending `checkouts` row at the studio's price, never one from the request, and redirects to the hosted page.
+  - The success URL is `/billing/checkouts/{checkout}/return` on the studio's subdomain. That route runs `FulfilCheckout`, which asks the gateway about the session id stored on the checkout row. If it was paid, it locks the row and, unless the checkout is already completed, either activates the customer's `memberships` row or adds a `purchase` entry of N credits. Then it marks the checkout completed.
+  - Only the checkout's own customer can open the return route (`CheckoutPolicy::complete`). `credit_entries.checkout_id` is unique, so the database refuses a second credit for one purchase.
+- **Entitlement** (`App\Billing\Entitlements`).
+  - The rule: a free studio books with `paid_with = free`; otherwise an active, unexpired membership (`membership`); otherwise one credit (`credit`, a `-1` ledger entry for the booking); otherwise "Buy a membership or a class pack to book."
+  - `BookSession` locks the customer row after the session row before spending, so parallel bookings cannot spend one credit twice.
+  - `JoinWaitlist` requires an entitlement, but spends nothing.
+  - `FillFromWaitlist` charges the promoted customer, and skips one who is no longer entitled.
+  - `CancelBooking` refunds a credit with a `+1` `refund` entry.
+  - The ledger is append-only, and the balance is the sum of `change`.
+- **Pages.** `/billing` (customers) shows the offers, the membership and the credit balance. The navigation shows Billing to customers.
+- **Not built yet:** webhooks, renewals, payment failures and the grace period (feat-008). Until then a membership lasts until the period end recorded at checkout.
+- **Tests.**
+  - `web/tests/Feature/Billing/` covers checkout, fulfilment, entitlement and the Stripe gateway. The gateway test runs against hand-written JSON fixtures (`web/tests/Fixtures/Stripe/`) through a recorded stripe-php HTTP client, so no network is used.
+  - `web/tests/Concurrency/ParallelBillingTest.php` shows on PostgreSQL that one customer booking four sessions at once spends a single credit once (without the customer lock, all four got in), and that four parallel fulfilments credit a pack once.

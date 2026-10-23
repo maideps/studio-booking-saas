@@ -21,8 +21,8 @@ final readonly class ProtectedActions
      * @param  list<Role>  $allowed
      * @param  bool  $authorized  whether a policy guards it, so a user of another tenant gets 403
      * @param  Closure(StudioFixture): array<string, mixed>  $payload
-     * @param  (Closure(StudioFixture): array<string, int>)|null  $setup  creates the records the action needs
-     *                                                                    and returns extra path placeholders
+     * @param  (Closure(StudioFixture): array<string, int|string>)|null  $setup  creates the records the action needs
+     *                                                                           and returns extra path placeholders
      */
     public function __construct(
         public string $method,
@@ -89,6 +89,15 @@ final readonly class ProtectedActions
 
                     return [];
                 }),
+            'billing page' => new self('GET', '/billing', [Role::Customer], true, $none),
+            'buy a pass' => new self('POST', '/billing/checkout/{kind}', [Role::Customer], true, $none,
+                function (StudioFixture $studio): array {
+                    $studio->sellPasses();
+
+                    return ['{kind}' => 'class_pack'];
+                }),
+            'return from checkout' => new self('GET', '/billing/checkouts/{checkout}/return', [Role::Customer], true, $none,
+                fn (StudioFixture $studio): array => ['{checkout}' => $studio->customerPaidCheckout()->id]),
             'leave a waitlist' => new self('DELETE', '/waitlist/{waitlistEntry}', [Role::Customer], true, $none,
                 fn (StudioFixture $studio): array => ['{waitlistEntry}' => $studio->customerWaitlistEntry()->id]),
         ];

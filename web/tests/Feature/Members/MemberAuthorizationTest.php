@@ -26,6 +26,7 @@ it('shares the signed-in user and what the navigation may offer', function (Role
                 'viewMembers' => $role !== Role::Customer,
                 'manageClasses' => $role !== Role::Customer,
                 'updateSettings' => $role === Role::Owner,
+                'buy' => $role === Role::Customer,
             ])
             ->where('tenant.slug', 'studio-a'));
 })->with('roles');

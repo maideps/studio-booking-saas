@@ -24,6 +24,8 @@ x-app-env: &app-env
   MAIL_HOST: mailpit
   MAIL_PORT: "1025"
   MAIL_FROM_ADDRESS: bookings@studio-booking.test
+  # A Stripe test key enables Stripe Checkout; without it the local stack uses the fake gateway (D-012).
+  STRIPE_SECRET: ${STRIPE_SECRET:-}
 
 x-app: &app
   build:

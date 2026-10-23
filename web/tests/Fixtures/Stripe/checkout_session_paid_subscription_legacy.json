@@ -1,0 +1,15 @@
+{
+  "id": "cs_test_m1E2m3B4e5R6",
+  "object": "checkout.session",
+  "mode": "subscription",
+  "status": "complete",
+  "payment_status": "paid",
+  "url": null,
+  "subscription": {
+    "id": "sub_1QxYz0LEGACY",
+    "object": "subscription",
+    "status": "active",
+    "current_period_end": 1796083200,
+    "items": {"object": "list", "data": [], "has_more": false, "url": "/v1/subscription_items"}
+  }
+}

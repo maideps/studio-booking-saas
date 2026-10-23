@@ -18,7 +18,7 @@ use InvalidArgumentException;
  * A studio using the platform. Tenants are central records: this model is
  * not tenant-scoped, and its slug is the tenant's subdomain.
  */
-#[Fillable(['name', 'slug', 'timezone', 'contact_email', 'cancellation_window_hours'])]
+#[Fillable(['name', 'slug', 'timezone', 'contact_email', 'cancellation_window_hours', 'currency', 'membership_price_cents', 'class_pack_size', 'class_pack_price_cents'])]
 class Tenant extends Model
 {
     /** @use HasFactory<TenantFactory> */
@@ -32,6 +32,7 @@ class Tenant extends Model
     protected $attributes = [
         'timezone' => 'UTC',
         'cancellation_window_hours' => 12,
+        'currency' => 'eur',
     ];
 
     /** One DNS label: lowercase letters, digits and inner hyphens, at most 63 characters. */
@@ -85,6 +86,30 @@ class Tenant extends Model
     public function cancellationDeadline(CarbonInterface $startsAt): CarbonImmutable
     {
         return CarbonImmutable::instance($startsAt)->subHours($this->cancellation_window_hours);
+    }
+
+    /**
+     * Whether the studio sells a monthly membership (D-012).
+     */
+    public function offersMembership(): bool
+    {
+        return $this->membership_price_cents !== null;
+    }
+
+    /**
+     * Whether the studio sells a class pack (D-012).
+     */
+    public function offersClassPack(): bool
+    {
+        return $this->class_pack_size !== null && $this->class_pack_price_cents !== null;
+    }
+
+    /**
+     * A studio that sells nothing is free to book.
+     */
+    public function isFreeToBook(): bool
+    {
+        return ! $this->offersMembership() && ! $this->offersClassPack();
     }
 
     /**

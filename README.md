@@ -4,7 +4,7 @@ A multi-tenant booking and membership platform for small studios (yoga, fitness,
 
 > **Portfolio project.** All data is synthetic, Stripe runs in test mode only, and emails are caught locally. It is built with AI coding agents using [ai-harness-framework](https://github.com/maideps/ai-harness-framework): one feature at a time, with layered verification and recorded evidence in this repository (`feature_list.json`, `progress/`, `DECISIONS.md`).
 
-**Stack:** Laravel 13 (PHP 8.3+) · Vue 3 + TypeScript (Inertia) · PostgreSQL · Redis · Pest · Larastan · Docker Compose · GitHub Actions. Planned: Stripe (test mode, Cashier) in feat-007 and Playwright in feat-013.
+**Stack:** Laravel 13 (PHP 8.3+) · Vue 3 + TypeScript (Inertia) · PostgreSQL · Redis · Pest · Larastan · Docker Compose · GitHub Actions. Stripe in test mode through stripe-php (D-012). Planned: Playwright in feat-013.
 
 **What it is meant to demonstrate:** tenant isolation that is proven by tests, booking without overbooking under concurrency, idempotent Stripe webhooks, role-based policies, queued and scheduled jobs, an append-only audit log, and a small versioned public API.
 
@@ -15,7 +15,7 @@ Early build. The project skeleton (feat-001) is in place: the Laravel app in [`w
 - staff invitations by emailed link;
 - class templates and a schedule of sessions with an instructor, a time and a capacity.
 
-The database itself refuses a session that points at another studio's class or instructor (see [Studios, staff and classes](docs/ARCHITECTURE.md#studios-staff-and-classes)). Bookings (feat-005) are built: customers book places from the schedule. A row lock on the session means parallel requests never overbook it, and a unique index means a customer never holds two places in one session. A test on a real PostgreSQL proves both with racing processes (see [Bookings](docs/ARCHITECTURE.md#bookings)). Cancellation and the waitlist (feat-006) are built: customers cancel until a deadline each studio sets, join a first-in-first-out waitlist for full classes, and the first person waiting gets a freed place at once. Race tests show that a new booking never jumps the queue and a place never stays empty while someone waits (see [Cancellation and waitlist](docs/ARCHITECTURE.md#cancellation-and-waitlist)). Memberships and Stripe checkout come next (feat-007). The 14-feature plan is in [`feature_list.json`](feature_list.json); the current state is in [`PROGRESS.md`](PROGRESS.md) and the hand-off for the next session is in [`session-handoff.md`](session-handoff.md).
+The database itself refuses a session that points at another studio's class or instructor (see [Studios, staff and classes](docs/ARCHITECTURE.md#studios-staff-and-classes)). Bookings (feat-005) are built: customers book places from the schedule. A row lock on the session means parallel requests never overbook it, and a unique index means a customer never holds two places in one session. A test on a real PostgreSQL proves both with racing processes (see [Bookings](docs/ARCHITECTURE.md#bookings)). Cancellation and the waitlist (feat-006) are built: customers cancel until a deadline each studio sets, join a first-in-first-out waitlist for full classes, and the first person waiting gets a freed place at once. Race tests show that a new booking never jumps the queue and a place never stays empty while someone waits (see [Cancellation and waitlist](docs/ARCHITECTURE.md#cancellation-and-waitlist)). Memberships and Stripe checkout (feat-007) are built: each studio sells a monthly membership and a class pack through Stripe Checkout in test mode, and only an entitled customer can book. Tests never call the network, and a PostgreSQL race test shows a single credit is never spent twice (see [Billing](docs/ARCHITECTURE.md#billing)). Stripe webhooks and payment failures come next (feat-008). The 14-feature plan is in [`feature_list.json`](feature_list.json); the current state is in [`PROGRESS.md`](PROGRESS.md) and the hand-off for the next session is in [`session-handoff.md`](session-handoff.md).
 
 ## Quick Start
 
@@ -39,7 +39,7 @@ make help           # or: npm run help
 
 `npm run smoke` builds the image, starts the stack as a throwaway Compose project on its own ports, checks that it serves the app, and removes it again.
 
-To try sign-in, seed the demo studio (`docker compose exec app php artisan db:seed`) and open http://demo.localhost:8000/login. The seeder creates `owner@example.com`, `staff@example.com` and `customer@example.com`, all with the factory password `password`, plus two classes and a week of sessions. Invitation emails are caught by Mailpit at http://localhost:8025.
+To try sign-in, seed the demo studio (`docker compose exec app php artisan db:seed`) and open http://demo.localhost:8000/login. The seeder creates `owner@example.com`, `staff@example.com` and `customer@example.com`, all with the factory password `password`, plus two classes, a week of sessions and prices; the demo customer has a membership. Without a `STRIPE_SECRET` the local stack uses a fake payment gateway that accepts every checkout; set `STRIPE_SECRET` to a Stripe test key to use Stripe Checkout. Invitation emails are caught by Mailpit at http://localhost:8025.
 
 ### Prerequisites
 

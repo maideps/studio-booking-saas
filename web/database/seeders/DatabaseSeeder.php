@@ -7,6 +7,7 @@ namespace Database\Seeders;
 use App\Actions\Bookings\BookSession;
 use App\Models\ClassSession;
 use App\Models\ClassTemplate;
+use App\Models\Membership;
 use App\Models\Tenant;
 use App\Models\User;
 use Illuminate\Database\Seeder;
@@ -16,7 +17,8 @@ class DatabaseSeeder extends Seeder
     /**
      * Seed the application's database: a demo studio with one member per
      * role, all with the factory password ("password"), two classes, a week
-     * of sessions and one booking.
+     * of sessions, prices (a 49.00 membership and a 10-class pack for 90.00),
+     * and a customer with an active membership and one booking.
      *
      * Model events stay on: they fill tenant_id and guard tenant writes.
      */
@@ -27,12 +29,16 @@ class DatabaseSeeder extends Seeder
             'slug' => 'demo',
             'timezone' => 'Europe/Madrid',
             'contact_email' => 'hello@demo-studio.test',
+            'membership_price_cents' => 4900,
+            'class_pack_size' => 10,
+            'class_pack_price_cents' => 9000,
         ]);
 
         $tenant->run(function () use ($tenant): void {
             User::factory()->owner()->create(['name' => 'Olivia Owner', 'email' => 'owner@example.com']);
             $staff = User::factory()->staff()->create(['name' => 'Sam Staff', 'email' => 'staff@example.com']);
             $customer = User::factory()->customer()->create(['name' => 'Casey Customer', 'email' => 'customer@example.com']);
+            Membership::factory()->create(['customer_id' => $customer->id]);
 
             $classes = [
                 ['name' => 'Morning Flow', 'description' => 'A gentle start to the day.', 'duration_minutes' => 60, 'capacity' => 12, 'local_time' => '07:30'],

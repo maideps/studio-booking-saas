@@ -157,7 +157,7 @@
     {
       "id": "feat-007",
       "name": "Memberships and Stripe checkout",
-      "behavior": "Membership plans and class packs, Stripe checkout in test mode with Cashier, and entitlement rules that decide whether a customer may book.",
+      "behavior": "Membership plans and class packs, Stripe Checkout in test mode through a domain-owned payment gateway (stripe-php, D-012), and entitlement rules that decide whether a customer may book.",
       "verification": "Tests with a fake Stripe gateway cover subscribe, entitlement checks and class-pack credit use; no test calls the network.",
       "dependencies": [
         "feat-003"

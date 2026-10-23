@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use App\Enums\BookingPayment;
 use App\Tenancy\BelongsToTenant;
 use Database\Factories\BookingFactory;
 use Illuminate\Database\Eloquent\Builder;
@@ -65,6 +66,7 @@ class Booking extends Model
     {
         return [
             'active' => 'boolean',
+            'paid_with' => BookingPayment::class,
         ];
     }
 }
